@@ -1,5 +1,5 @@
 window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId,toast,speak,persist,setDialog,go,render}) {
-  const {escape:e, icon, button, iconButton, pageTitle, wordCount, small,wholeExample} = ui;
+  const {escape:e, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, exampleFootnote} = ui;
   const modes = Study.displayModes;
   let template;
   let finished;
@@ -8,7 +8,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
   let writer = null;
   let screen = null;
 
-  const names = {all:'Весь словарь',photo:'Слова с фото',saved:'Избранное',due:'К повторению',new:'Новые слова',mistakes:'Нужно закрепить', 'photo-new':'Новые слова с фото'};
+  const names = {all:'Весь словарь',photo:'Словарь',saved:'Избранное',due:'К повторению',new:'Новые слова',mistakes:'Нужно закрепить','photo-new':'Словарь'};
   const modeById = id => modes.find(m => m.id === id);
   const scopeLabel = session => session.label || names[session.scope] || categoryName(session.scope);
   const available = (pool, mode) => mode === 'sentence' ? pool.filter(word => word.examples.length) : pool;
@@ -166,6 +166,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
       const [before,after] = example.prompt.split('__');
       return '<div class="prompt-sentence" lang="zh-Hans">'+e(before)+'<span class="blank">'+(mark ? e(word.hanzi) : '…')+'</span>'+e(after)+'</div>'+
         '<p class="translation">'+e(example.translation)+'</p>'+
+        exampleFootnote(word,example)+
         (example.custom ? '<p class="small">Значение пропущенного слова: '+e(word.meaning)+'</p>' : '')+
         (mark ? '<div class="actions center">'+button('Послушать предложение','listen-example','',false,'volume')+'</div>' : '');
     }

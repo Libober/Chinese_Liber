@@ -32,7 +32,17 @@
   const small = text => '<span class="small">'+escape(text)+'</span>';
   const formatDate = timestamp => new Intl.DateTimeFormat('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(timestamp);
   const wholeExample = (word, example) => example.prompt.replace('__',word.hanzi);
-  const ui = {escape, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, formatDate};
+  const contextGlossary = [
+    {hanzi:'箱子',pinyin:'xiāngzi',meaning:'коробка'},
+    {hanzi:'每天',pinyin:'měitiān',meaning:'каждый день'},
+    {hanzi:'一杯',pinyin:'yì bēi',meaning:'одна чашка или один стакан. 杯 — счётное слово'}
+  ];
+  function exampleFootnote(word, example) {
+    const parts = wholeExample(word,example);
+    return contextGlossary.filter(note => word.hanzi !== note.hanzi && parts.includes(note.hanzi))
+      .map(note => '<p class="example-note"><b lang="zh-Hans">'+escape(note.hanzi)+'</b> '+escape(note.pinyin)+' — '+escape(note.meaning)+'</p>').join('');
+  }
+  const ui = {escape, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, formatDate, exampleFootnote};
   let saved;
   try { saved = JSON.parse(localStorage.getItem(Study.stateKey)); } catch { saved = null; }
   const state = Study.safeState(saved);
@@ -45,6 +55,12 @@
   function rebuild() {
     words = Study.buildVocabulary(state.custom);
     byId = new Map(words.map(word => [word.id,word]));
+    if (state.active && ['photo','photo-new'].includes(state.active.scope)) state.active.label = 'Словарь';
+    for (const question of state.active?.questions || []) {
+      if (question?.mode !== 'sentence') continue;
+      const examples = byId.get(question.id)?.examples || [];
+      question.example = examples.find(e => e.prompt === question.example?.prompt && e.translation === question.example?.translation) || examples[0] || question.example;
+    }
     categories = [...Study.categories];
     for (const id of new Set(words.flatMap(word => word.groups))) {
       if (categories.some(category => category.id === id)) continue;
@@ -84,6 +100,7 @@
   }
 
   function categoryName(id) {
+    if (id?.startsWith('added:')) return categoryName(id.slice(6))+' · Новые в теме';
     return categories.find(c => c.id === id)?.name || 'Весь словарь';
   }
 
@@ -91,8 +108,7 @@
     if (id === 'all') return words;
     if (id === 'due') return Study.dueWords(words,state);
     if (id === 'new') return words.filter(word => !Study.getProgress(state,word.id));
-    if (id === 'photo') return words.filter(word => word.photo);
-    if (id === 'photo-new') return words.filter(word => word.photo && !word.original);
+    if (id.startsWith('added:')) return getWords(id.slice(6)).filter(word => word.photo && !word.original);
     if (id === 'saved') return words.filter(word => state.favorites.includes(word.id));
     if (id === 'mistakes') return words.filter(word => {
       const p = Study.getProgress(state,word.id);
@@ -127,14 +143,13 @@
   function home() {
     const due = getWords('due').length;
     const learned = words.filter(w => Study.getProgress(state,w.id)?.level >= 3).length;
-    const photoCount = getWords('photo').length;
-    return '<section class="hero"><div class="hero-copy"><h1>Китайский<br>по темам</h1><p>Запоминай слова, слушай произношение и тренируй письмо по чертам.</p><div class="actions">'+
+    return '<section class="hero"><div class="hero-copy"><p class="hero-hanzi" lang="zh-Hans">进击的汉字</p><h1 lang="en">Attack on <span>Hànzì</span></h1><div class="actions">'+
       (due ? '<a class="button primary" href="#review">'+icon('refresh')+'К повторению</a>' : button('Начать с карточек','configure','all',true,'cards'))+
-      '<a class="button secondary" href="#dict/photo">Слова с фото</a></div></div><img class="hero-picture" src="assets/calligraphy.jpg" width="864" height="576" alt="" fetchpriority="high"></section>'+
+      '<a class="button secondary" href="#topics">Темы словаря</a></div></div><img class="hero-picture" src="assets/bao-hero.jpg" width="760" height="760" alt="Удивлённая булочка баоцзы с каллиграфической кистью выглядывает из-за крепостной стены" fetchpriority="high"></section>'+
       '<section class="stat-grid" aria-label="Сводка словаря">'+stat(words.length,'слов в словаре','book')+stat(learned,'закреплено','check')+stat(due,'к повторению','clock')+'</section>'+
       (practice.canResume() ? '<aside class="banner"><div><strong>Тренировка не закончена</strong><p>'+escape(practice.resumeLabel())+'</p></div><a class="button primary" href="#practice">Продолжить</a></aside>' : '')+
-      '<section class="section"><div class="section-head"><div><h2>Темы словаря</h2><p>Открой тему, посмотри слова и выбери упражнение.</p></div><a class="button secondary" href="#dict">Весь словарь</a></div><div class="topic-grid">'+categories.filter(c => getWords(c.id).length).map(topicCard).join('')+'</div></section>'+
-      '<section class="section"><div class="section-head"><div><h2>Тренировки</h2><p>'+wordCount(photoCount)+' с фотографий уже в словаре.</p></div></div>'+modeGrid('all')+'</section>';
+      '<section class="section" id="topics"><div class="section-head"><h2 tabindex="-1">Темы словаря</h2><a class="button secondary" href="#dict">Весь словарь</a></div><div class="topic-grid">'+categories.filter(c => getWords(c.id).length).map(topicCard).join('')+'</div></section>'+
+      '<section class="section"><div class="section-head"><h2>Тренировки</h2></div>'+modeGrid('all')+'</section>';
   }
 
   function wordStatus(id) {
@@ -156,22 +171,23 @@
     return '<div class="panel empty"><p>'+escape(copy)+'</p></div>';
   }
 
-  const customScopes = {all:'Все темы',photo:'Слова с фото',saved:'Избранное',due:'К повторению',new:'Новые слова',mistakes:'Нужно закрепить','photo-new':'Новые слова с фото'};
+  const customScopes = {all:'Все темы',saved:'Избранное',due:'К повторению',new:'Новые слова',mistakes:'Нужно закрепить',photo:'Словарь','photo-new':'Словарь'};
   const scopeName = id => customScopes[id] || categoryName(id);
 
   function dictionary(key) {
-    const topic = categories.find(c => c.id === key);
+    const addedOnly = key.startsWith('added:');
+    const categoryKey = addedOnly ? key.slice(6) : key;
+    const topic = categories.find(c => c.id === categoryKey);
     const vocab = getWords(key);
-    const listed = Object.entries({all:'Все темы',photo:'Слова с фото','photo-new':'Новые слова с фото',saved:'Избранное'}).concat(categories.map(c => [c.id,c.name]));
-    const description = topic ? topic.description+' · '+wordCount(vocab.length) :
-      key === 'photo' ? 'Лексика со всех десяти фотографий, включая слова, уже знакомые по прежнему словарю.' :
-      key === 'photo-new' ? 'Слова с фотографий, которых не было в прежнем словаре.' :
-      key === 'saved' ? 'Слова, которые ты отметил звёздочкой.' : 'Ищи по ханзи, пиньиню или переводу.';
-    return pageTitle(key === 'all' ? 'Словарь' : scopeName(key), description)+
-      (key === 'photo' ? '<div class="actions" style="margin-bottom:1rem"><a class="button secondary" href="#dict/photo-new">Только новые с фото · '+getWords('photo-new').length+'</a></div>' : '')+
+    const listed = Object.entries({all:'Все темы',saved:'Избранное'}).concat(categories.map(c => [c.id,c.name]));
+    const description = topic ? topic.description+' · '+wordCount(vocab.length) : '';
+    const base = '#dict/'+encodeURIComponent(categoryKey);
+    const recent = topic ? getWords('added:'+topic.id).length : 0;
+    return pageTitle(topic?.name || (key === 'all' ? 'Словарь' : scopeName(key)), description)+
+      (recent ? '<div class="actions topic-switch" aria-label="Наборы темы"><a class="button secondary" href="'+base+'"'+(!addedOnly ? ' aria-current="page"' : '')+'>Вся тема</a><a class="button secondary" href="'+base+'/added"'+(addedOnly ? ' aria-current="page"' : '')+'>Новые в теме ('+recent+')</a></div>' : '')+
       (vocab.length ? '<section><div class="section-head"><h3>Тренировка по этому набору</h3></div>'+modeGrid(key)+'</section>' : '')+
       '<div class="filters"><label class="search">Поиск<input id="word-search" class="field" type="search" value="'+escape(dictionaryQuery)+'" placeholder="Иероглиф, пиньинь или перевод" autocomplete="off"></label>'+
-      '<label>Тема<select class="field" id="category-filter">'+listed.map(([id,name]) => '<option value="'+escape(id)+'"'+(key === id ? ' selected' : '')+'>'+escape(name)+'</option>').join('')+'</select></label>'+
+      '<label>Тема<select class="field" id="category-filter">'+listed.map(([id,name]) => '<option value="'+escape(id)+'"'+(categoryKey === id ? ' selected' : '')+'>'+escape(name)+'</option>').join('')+'</select></label>'+
       '<label>Прогресс<select class="field" id="status-filter">'+[['all','Любой'],['new','Новые'],['due','К повторению'],['solid','Закреплённые']].map(([id,name]) => '<option value="'+id+'"'+(dictionaryStatus === id ? ' selected' : '')+'>'+name+'</option>').join('')+'</select></label></div>'+
       '<p id="word-count" class="small word-count" aria-live="polite"></p><div id="word-list" class="word-list"></div>';
   }
@@ -199,7 +215,7 @@
     const now = Date.now();
     const upcoming = words.map(word => [word,Study.getProgress(state,word.id)])
       .filter(([,p]) => p?.due > now).sort((a,b) => a[1].due-b[1].due).slice(0,12);
-    return pageTitle('Повторение','Здесь видно, какие слова повторить сейчас и какие добавить в следующую тренировку.')+
+    return pageTitle('Повторение')+
       '<div class="stat-grid">'+stat(due.length,'к повторению','clock')+stat(fresh.length,'ещё не изучались','cards')+stat(mistakes.length,'нужно закрепить','target')+'</div>'+
       '<section><div class="section-head"><h2>К повторению сегодня</h2>'+(due.length ? button('Повторить','configure','due',true,'refresh') : '')+'</div>'+
       (due.length ? '<div class="word-list">'+due.map(word => wordRow(word,true)).join('')+'</div>' : placeholder('На данный момент очередь пуста. Можно взять новые слова или выбрать тему.'))+'</section>'+
@@ -246,10 +262,10 @@
     if (!word) return;
     const translations = word.examples.map((example,i) => '<li><div class="example-zh" lang="zh-Hans">'+escape(wholeExample(word,example))+'</div>'+
       (example.pinyin ? '<div class="small">'+escape(example.pinyin)+'</div>' : '')+
-      '<div>'+escape(example.translation)+'</div>'+iconButton('Произнести пример '+(i+1),'volume','speak-example',id+'~'+i)+'</li>').join('');
+      '<div>'+escape(example.translation)+'</div>'+exampleFootnote(word,example)+iconButton('Произнести пример '+(i+1),'volume','speak-example',id+'~'+i)+'</li>').join('');
     setDialog(word.hanzi,'<div class="word-reading">'+escape(word.pinyin)+'</div><p>'+escape(word.meaning)+'</p>'+
       '<div class="actions">'+word.groups.map(group => '<a class="pill" href="#dict/'+encodeURIComponent(group)+'" data-action="close-dialog">'+escape(categoryName(group))+'</a>').join('')+
-      (word.photo ? '<span class="pill">С фотографии</span>' : '')+'</div>'+positionFigure(word)+
+      '</div>'+positionFigure(word)+
       '<div class="actions">'+button('Произнести','speak-word',id,false,'volume')+button('Потренировать письмо','configure-word',id,true,'pen')+'</div>'+
       (translations ? '<h3>Примеры</h3><ul class="example-list">'+translations+'</ul>' : ''));
     document.querySelector('#dialog-title').classList.add('detail-term');
@@ -272,11 +288,15 @@
   }
 
   function updateRoute() {
-    const [requested, key] = location.hash.slice(1).split('/');
+    const [requested, key, filter] = location.hash.slice(1).split('/');
     if (requested === 'main') return;
-    const page = ['home','dict','review','progress','practice','summary'].includes(requested) ? requested : 'home';
+    const oldCollection = requested === 'dict' && ['photo','photo-new'].includes(key);
+    const showTopics = requested === 'topics' || oldCollection;
+    if (oldCollection) history.replaceState(null,'','#topics');
+    const page = !showTopics && ['home','dict','review','progress','practice','summary'].includes(requested) ? requested : 'home';
     let unique = 'all';
     try { if (key) unique = decodeURIComponent(key); } catch { unique = 'all'; }
+    if (page === 'dict' && filter === 'added' && categories.some(c => c.id === unique)) unique = 'added:'+unique;
     if (page === 'dict' && unique !== route.key) {
       dictionaryQuery = '';
       dictionaryStatus = 'all';
@@ -284,8 +304,14 @@
     route = {page,key:unique};
     if (dialog.open) dialog.close();
     render();
-    window.scrollTo(0,0);
-    main.focus({preventScroll:true});
+    if (showTopics) {
+      const heading = document.querySelector('#topics h2');
+      heading.focus({preventScroll:true});
+      heading.scrollIntoView();
+    } else {
+      window.scrollTo(0,0);
+      main.focus({preventScroll:true});
+    }
   }
 
   const imports = window.HanziImport({Study,state, persist, rebuild, render, getWords, ui, toast, setDialog});

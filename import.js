@@ -6,7 +6,7 @@ window.HanziImport = function ({Study,state,persist,rebuild,render,getWords,ui,t
 
   function settings() {
     setDialog('Материалы и резервная копия',
-      '<p>Слова из прежних документов и фотографий уже включены. Можно добавить свой DOCX или перенести прогресс из JSON.</p>'+
+      '<p>Добавь слова из DOCX или перенеси прогресс из JSON.</p>'+
       '<div class="actions">'+button('Скачать резервную копию','export')+
       '<label class="button primary file-action">Загрузить DOCX или JSON<input id="import-file" type="file" accept=".docx,.json"></label></div>'+
       '<p id="import-status" class="small" role="status">Загружаемые файлы обрабатываются в браузере.</p>');
