@@ -62,6 +62,27 @@
     return {progress:{}, favorites:[], custom:[], sessions:[], active:null, migrated:false, direction:'hanzi', hideAudioNotice:false};
   }
 
+  function mergeSessions(...lists) {
+    const sessions = new Map();
+    for (const list of lists) {
+      if (!Array.isArray(list)) continue;
+      for (const item of list) {
+        if (!item || !Number.isFinite(item.time) || !displayModes.some(mode => mode.id === item.mode) ||
+            !Number.isSafeInteger(item.total) || item.total < 1 || !Number.isSafeInteger(item.correct) ||
+            item.correct < 0 || item.correct > item.total) continue;
+        const {time, mode, total, correct} = item;
+        const scope = clean(item.scope);
+        const id = clean(item.id);
+        const answered = Number.isSafeInteger(item.answered) && correct <= item.answered && item.answered <= total
+          ? item.answered : undefined;
+        const key = id || JSON.stringify([time,mode,scope,total,correct]);
+        if (sessions.has(key) && (sessions.get(key).answered !== undefined || answered === undefined)) continue;
+        sessions.set(key,{id:id || undefined,time,scope,mode,total,correct,answered});
+      }
+    }
+    return [...sessions.values()].sort((a,b) => b.time-a.time);
+  }
+
   function safeState(value) {
     const defaults = resetState();
     if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;
@@ -69,7 +90,7 @@
       progress: value.progress && typeof value.progress === 'object' && !Array.isArray(value.progress) ? value.progress : {},
       favorites: Array.isArray(value.favorites) ? value.favorites.filter(id => typeof id === 'string') : [],
       custom: Array.isArray(value.custom) ? value.custom.filter(item => item && typeof item === 'object') : [],
-      sessions: Array.isArray(value.sessions) ? value.sessions.filter(item => item && Number.isFinite(item.time)).slice(0, 100) : [],
+      sessions: mergeSessions(value.sessions),
       active: value.active && Array.isArray(value.active.questions) ? value.active : null,
       migrated: value.migrated === true,
       direction: value.direction === 'meaning' ? 'meaning' : 'hanzi',
@@ -260,6 +281,6 @@
     }).sort((a,b) => getProgress(state,a.id).due - getProgress(state,b.id).due);
   }
 
-  window.HanziStudy = {categories, displayModes, stateKey, legacyKey, resetState, safeState, mergeCustom,
+  window.HanziStudy = {categories, displayModes, stateKey, legacyKey, resetState, safeState, mergeSessions, mergeCustom,
     buildVocabulary, fromLegacy, normalized, readingKey, readingId, shuffle, makeQuestions, equivalent, getProgress, grade, dueWords, day};
 })();

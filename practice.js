@@ -81,7 +81,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
       return false;
     }
     state.direction = form.get('direction') === 'meaning' ? 'meaning' : 'hanzi';
-    state.active = {scope,label:template.label,mode,questions,index:0,answers:{},writing:{},direction:state.direction};
+    state.active = {id:globalThis.crypto?.randomUUID?.(),scope,label:template.label,mode,questions,index:0,answers:{},writing:{},direction:state.direction};
     finished = null;
     screen = null;
     persist();
@@ -110,8 +110,8 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     const marks = Object.values(s.answers);
     const correct = marks.filter(a => a.correct).length;
     finished = {...s,time:Date.now(),correct,total:s.questions.length};
-    state.sessions.unshift({time:finished.time,scope:s.scope,mode:s.mode,correct,total:s.questions.length});
-    state.sessions = state.sessions.slice(0,100);
+    const answered = marks.filter(mark => mark.value !== 'skip').length;
+    state.sessions.unshift({id:s.id,time:finished.time,scope:s.scope,mode:s.mode,correct,total:s.questions.length,answered});
     state.active = null;
     persist();
     go('#summary');

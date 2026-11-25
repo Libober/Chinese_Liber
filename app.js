@@ -76,7 +76,13 @@
   }
 
   function persist() {
-    try { localStorage.setItem(Study.stateKey, JSON.stringify(state)); }
+    try {
+      const stored = localStorage.getItem(Study.stateKey);
+      let previous;
+      try { previous = JSON.parse(stored); } catch { /* Replace unreadable saved data. */ }
+      state.sessions = Study.mergeSessions(previous?.sessions,state.sessions);
+      localStorage.setItem(Study.stateKey, JSON.stringify(state));
+    }
     catch { toast('Браузер не смог сохранить изменения. Можно скачать резервную копию.'); }
   }
 
@@ -139,19 +145,32 @@
   }
 
   function voiceInstructions(hidden = false) {
+    const agent = navigator.userAgent;
+    const isMac = /Macintosh/i.test(agent);
+    const isIOS = /iPhone|iPad|iPod/i.test(agent) || (isMac && navigator.maxTouchPoints > 1);
+    const platform = /Android/i.test(agent) ? 'android' : isIOS ? 'ios' :
+      isMac ? 'mac' : /Windows/i.test(agent) ? 'windows' : '';
+    const details = (device) => '<details'+(device === platform ? ' open' : '')+'>';
     return '<section class="voice-guide" id="voice-guide" aria-labelledby="voice-guide-title"'+(hidden ? ' hidden' : '')+'>'+
       '<h3 id="voice-guide-title" tabindex="-1">Установка голоса</h3>'+
-      '<details open><summary>Windows 11</summary><p>Если кнопка добавления голосов не сработала, открой Windows PowerShell от имени администратора и выполни команды по очереди:</p>'+
-      '<pre class="voice-command">Add-WindowsCapability -Online -Name Language.Basic~~~zh-CN~0.0.1.0\nAdd-WindowsCapability -Online -Name Language.TextToSpeech~~~zh-CN~0.0.1.0\nGet-WindowsCapability -Online -Name Language.TextToSpeech~~~zh-CN~0.0.1.0</pre>'+
-      '<p>Если в результате указано Installed, полностью закрой и снова открой браузер, затем проверь голос на сайте.</p>'+
-      '<a href="https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/features-on-demand-language-fod?view=windows-11" target="_blank" rel="noopener">Справка Microsoft</a></details>'+
-      '<details><summary>macOS</summary><p>Открой «Системные настройки» → «Универсальный доступ» → «Чтение и речь» (Read &amp; Speak). В меню системного голоса выбери «Управление голосами» и скачай голос для мандаринского китайского.</p>'+
+      details('windows')+'<summary>Windows</summary><ol>'+
+      '<li>Открой «Параметры» → «Время и язык» → «Язык и регион». В Windows 10 этот раздел называется «Язык».</li>'+
+      '<li>В разделе «Предпочитаемые языки» нажми «Добавить язык» и выбери «Китайский (упрощённый, Китай)». Оставь выключенной опцию «Сделать языком интерфейса Windows».</li>'+
+      '<li>При установке отметь «Преобразование текста в речь». Если китайский уже добавлен, нажми «⋯» рядом с ним → «Языковые параметры» и скачай там «Преобразование текста в речь». В Windows 10 выбери китайский в списке и нажми «Параметры».</li></ol>'+
+      '<a href="https://support.microsoft.com/ru-ru/windows/hardware/input-devices/manage-the-language-and-keyboard-input-layout-settings-in-windows" target="_blank" rel="noopener">Справка Microsoft</a></details>'+
+      details('mac')+'<summary>macOS</summary><ol>'+
+      '<li>Открой меню Apple → «Системные настройки» → «Универсальный доступ» → «Чтение вслух» (Read &amp; Speak). Название в других версиях macOS может быть «Устный контент» (Spoken Content).</li>'+
+      '<li>Открой «Системный голос» → «Управление голосами». Найди мандаринский китайский (Китай) и скачай один из голосов.</li></ol>'+
       '<a href="https://support.apple.com/en-us/guide/mac-help/mchlp2290/mac" target="_blank" rel="noopener">Справка Apple для Mac</a></details>'+
-      '<details><summary>iPhone и iPad</summary><p>Открой «Настройки» → «Универсальный доступ» → «Чтение и речь» или «Устный контент» → «Голоса». Выбери китайский (мандаринский) и скачай голос.</p>'+
-      '<a href="https://support.apple.com/en-ie/guide/iphone/iph96b214f0/ios" target="_blank" rel="noopener">Справка Apple для iPhone</a></details>'+
-      '<details><summary>Android</summary><p>В настройках найди «Синтез речи». Открой настройки выбранного модуля, нажми «Установить голосовые данные» и выбери китайский (Китай).</p>'+
+      details('ios')+'<summary>iPhone и iPad</summary><ol>'+
+      '<li>Открой «Настройки» → «Универсальный доступ» → «Чтение вслух» → «Голоса». В других версиях iOS и iPadOS ищи «Устный контент» или «Экран вслух».</li>'+
+      '<li>Выбери китайский (мандаринский) и нажми значок загрузки рядом с голосом, если он ещё не скачан.</li></ol>'+
+      '<a href="https://support.apple.com/ru-ru/guide/iphone/iph96b214f0/ios" target="_blank" rel="noopener">Справка Apple для iPhone</a></details>'+
+      details('android')+'<summary>Android</summary><ol>'+
+      '<li>В настройках устройства найди «Синтез речи» или «Преобразование текста в речь». Этот пункт обычно находится в разделе «Специальные возможности».</li>'+
+      '<li>Нажми шестерёнку рядом с выбранным модулем синтеза речи. Открой «Установка голосовых данных», выбери «Китайский (Китай)» и скачай голос.</li></ol>'+
       '<a href="https://support.google.com/accessibility/android/answer/6006983?hl=ru" target="_blank" rel="noopener">Справка Google</a></details>'+
-      '<p>После загрузки перезапусти браузер, снова открой сайт и проверь озвучку.</p>'+
+      '<p>После загрузки закрой и снова открой браузер, вернись на сайт и нажми «Проверить голос». Если браузер не увидит голос, попробуй открыть сайт в Edge на Windows, Safari на устройствах Apple или Chrome на Android.</p>'+
       '<div class="actions">'+button('Проверить голос','voice-test','',false,'volume')+'</div>'+
       '<p id="voice-test-status" class="small" role="status"></p></section>';
   }
@@ -285,8 +304,25 @@
     const total = results.reduce((sum,p) => sum + p.attempts,0);
     const correct = results.reduce((sum,p) => sum + p.correct,0);
     const learned = results.filter(p => p.level >= 3).length;
+    const byMode = new Map(Study.displayModes.map(mode => [mode.id,{sessions:0,answered:0}]));
+    let answered = 0;
+    for (const session of state.sessions) {
+      const counts = byMode.get(session.mode);
+      const answers = session.answered ?? session.total;
+      counts.sessions += 1;
+      counts.answered += answers;
+      answered += answers;
+    }
     return pageTitle('Прогресс','Закреплёнными считаются слова, которые ты правильно вспомнил на нескольких повторениях.')+
       '<div class="stat-grid">'+stat(results.length,'слов в изучении','book')+stat(learned,'закреплено','check')+stat(total ? Math.round(correct/total*100) : 0,'точность, %','target')+'</div>'+
+      '<section class="training-stats" aria-labelledby="training-stats-title"><div class="section-head"><h2 id="training-stats-title">Статистика тренировок</h2></div>'+
+      '<div class="stat-grid training-stats-totals">'+stat(state.sessions.length,'завершено тренировок','chart')+stat(answered,'ответов в тренировках','check')+'</div>'+
+      '<div class="panel progress-list"><table aria-label="Статистика по типам заданий"><thead><tr><th scope="col">Тип задания</th><th scope="col">Тренировки</th><th scope="col">Ответы</th></tr></thead><tbody>'+
+      Study.displayModes.map(mode => {
+        const counts = byMode.get(mode.id);
+        return '<tr><th scope="row">'+escape(mode.name)+'</th><td>'+number.format(counts.sessions)+'</td><td>'+number.format(counts.answered)+'</td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      (state.sessions.some(session => session.answered === undefined) ? '<p class="small">В старых тренировках в число ответов могут входить пропуски.</p>' : '')+'</section>'+
       '<section><div class="section-head"><h2>По темам</h2></div><div class="panel progress-list">'+categories.map(category => {
         const all = getWords(category.id);
         const known = all.filter(word => Study.getProgress(state,word.id)?.level >= 3).length;

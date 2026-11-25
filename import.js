@@ -116,8 +116,7 @@ window.HanziImport = function ({Study,state,persist,rebuild,render,getWords,ui,t
           }
           state.custom = Study.mergeCustom(state.custom,incoming.custom);
           state.favorites = [...new Set([...state.favorites,...incoming.favorites])];
-          const sessions = new Map([...incoming.sessions,...state.sessions].map(session => [session.time,session]));
-          state.sessions = [...sessions.values()].sort((a,b) => b.time-a.time).slice(0,100);
+          state.sessions = Study.mergeSessions(state.sessions,incoming.sessions);
           if (!state.active && incoming.active?.writing) state.active = incoming.active;
         } else if (hasData(data)) {
           state.custom = Study.mergeCustom(state.custom,Study.fromLegacy(data,getWords('all')));

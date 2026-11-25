@@ -132,6 +132,14 @@ nav a:hover { background: #4d4131; color: #fff3da; }
 .progress-list { padding: .5rem 1rem; display: grid; gap: .1rem; }
 .progress-line { border-bottom: 1px solid var(--line); display: grid; grid-template-columns: minmax(8rem,1fr) minmax(5rem,1fr) auto; align-items: center; gap: .8rem; padding: .65rem 0; }
 .progress-line:last-child { border-bottom: 0; }
+.training-stats { margin-bottom: 2.65rem; }
+.training-stats .training-stats-totals { grid-template-columns: repeat(2,minmax(0,1fr)); margin-block: .6rem .95rem; }
+.training-stats table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.training-stats th, .training-stats td { padding: .55rem .3rem; text-align: right; }
+.training-stats th:first-child { text-align: left; }
+.training-stats tbody tr + tr { border-top: 1px solid var(--line); }
+.training-stats thead { border-bottom: 1px solid var(--line); }
+.training-stats > p { margin-top: .5rem; }
 .practice-wrap { max-width: 755px; margin: 0 auto; }
 .practice-top { display: flex; align-items: center; justify-content: space-between; gap: .7rem; margin-bottom: .55rem; }
 .practice-card { margin-top: 1.15rem; padding: clamp(.9rem, 4vw, 2.15rem); box-shadow: var(--shadow); }
@@ -192,9 +200,9 @@ dialog::backdrop { background: rgba(40,30,25,.64); }
 .voice-guide { padding: .72rem .85rem; border: 1px solid var(--line); border-radius: var(--radius); background: #f4e8d1; }
 .voice-guide > * + * { margin-top: .52rem; }
 .voice-guide summary { cursor: pointer; font-weight: 700; }
-.voice-guide details p { margin: .25rem 0 .55rem; }
+.voice-guide ol { margin: .35rem 0 .55rem; padding-inline-start: 1.4rem; }
+.voice-guide li + li { margin-top: .25rem; }
 .voice-guide a { text-decoration: underline; }
-.voice-command { padding:.5rem; white-space:pre-wrap; overflow-wrap:anywhere; background:var(--white); }
 .detail-term { font-size: clamp(2.4rem,7vw,3.8rem); }
 .example-list { display: grid; gap: .5rem; padding: 0; list-style: none; }
 .example-list li { border: 1px solid var(--line); background: #faf5ec; border-radius: .6rem; padding: .6rem; }
