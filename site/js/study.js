@@ -58,6 +58,53 @@
     return {prompt: clean(prompt), translation: clean(translation), pinyin: clean(pinyin)};
   }
 
+  function readMaterials(data, known) {
+    if (data?.format !== 'hanzi-materials-1' || !Array.isArray(data.words) || !data.words.length) {
+      throw new Error('В файле материалов нужен непустой список words.');
+    }
+    const ids = new Set();
+    const translations = /[а-яё]/i;
+    const hanziPattern = /^\p{Script=Han}{1,24}$/u;
+    const isPinyin = value => /^[a-züê\p{M}]+$/iu.test(value.normalize('NFD'));
+    return data.words.map((row,index) => {
+      const {hanzi,pinyin,meaning,group} = Object.fromEntries(['hanzi','pinyin','meaning','group'].map(key => [key,clean(row?.[key])]));
+      const id = hanzi+'|'+readingId(pinyin);
+      const existing = known.find(word => word.id === id);
+      const label = 'Слово '+(index+1)+(hanzi ? ' («'+hanzi+'»)' : '');
+      if (!hanziPattern.test(hanzi) || !pinyin || !pinyin.split(/[\s'’·-]+/).every(isPinyin)) {
+        throw new Error(label+' требует ханзи и пиньинь.');
+      }
+      if (ids.has(id)) throw new Error(label+' встречается дважды.');
+      ids.add(id);
+      if ((meaning && !translations.test(meaning)) || (!existing && (!meaning || !group))) {
+        throw new Error(label+' требует русский перевод и тему для нового слова.');
+      }
+      if (row.examples != null && !Array.isArray(row.examples)) throw new Error(label+' требует список examples.');
+      const examples = (row.examples || []).map((item,exampleIndex) => {
+        const name = label+', пример '+(exampleIndex+1);
+        const example = makeExample(item?.prompt,item?.translation,item?.pinyin);
+        if (!example || /[^\p{Script=Han}\p{P}\s]/u.test(example.prompt)) throw new Error(name+' требует китайскую фразу с одним пропуском __ и русский перевод.');
+        const full = example.prompt.replace('__',hanzi);
+        const syllables = example.pinyin.match(/[\p{Script=Latin}\p{M}]+/gu) || [];
+        if (syllables.length !== full.match(/\p{Script=Han}/gu).length || !syllables.every(isPinyin) ||
+            /[^\p{Script=Latin}\p{M}\p{P}\s]/u.test(example.pinyin)) {
+          throw new Error(name+' требует пиньинь полного предложения, по одному слогу на иероглиф.');
+        }
+        if (item.notes != null && !Array.isArray(item.notes)) throw new Error(name+' требует список notes.');
+        const notes = (item.notes || []).map(note => {
+          const term = clean(note?.hanzi), reading = clean(note?.pinyin), gloss = clean(note?.meaning);
+          if (!hanziPattern.test(term) || !example.prompt.includes(term) || !reading ||
+              !reading.split(/[\s'’·-]+/).every(isPinyin) || !translations.test(gloss)) {
+            throw new Error(name+' содержит неполную сноску или слово, которого нет вокруг пропуска.');
+          }
+          return {hanzi:term,pinyin:reading,meaning:gloss};
+        });
+        return {...example,notes,reviewedPinyin:true};
+      });
+      return {hanzi,pinyin,meaning,group,examples};
+    });
+  }
+
   function resetState() {
     return {progress:{}, favorites:[], custom:[], sessions:[], active:null, migrated:false, direction:'hanzi', hideAudioNotice:false};
   }
@@ -158,7 +205,8 @@
         const valid = e && makeExample(e.prompt, e.translation, e.pinyin);
         if (!valid || retiredTranslations.has(hanzi+'|'+normalized(valid.translation)) ||
             word.examples.some(example => !example.custom && example.prompt === valid.prompt)) continue;
-        word.examples.push({...valid,custom:true});
+        const notes = Array.isArray(e.notes) ? e.notes.filter(note => note && clean(note.hanzi) && clean(note.pinyin) && clean(note.meaning)) : [];
+        word.examples.push({...valid,notes,reviewedPinyin:e.reviewedPinyin === true,custom:true});
       }
     }
     for (const word of result.values()) {
@@ -281,6 +329,6 @@
     }).sort((a,b) => getProgress(state,a.id).due - getProgress(state,b.id).due);
   }
 
-  window.HanziStudy = {categories, displayModes, stateKey, legacyKey, resetState, safeState, mergeSessions, mergeCustom,
+  window.HanziStudy = {categories, displayModes, stateKey, legacyKey, resetState, safeState, mergeSessions, mergeCustom, readMaterials,
     buildVocabulary, fromLegacy, normalized, readingKey, readingId, shuffle, makeQuestions, equivalent, getProgress, grade, dueWords, day};
 })();

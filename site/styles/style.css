@@ -140,6 +140,8 @@ nav a:hover { background: #4d4131; color: #fff3da; }
 .training-stats tbody tr + tr { border-top: 1px solid var(--line); }
 .training-stats thead { border-bottom: 1px solid var(--line); }
 .training-stats > p { margin-top: .5rem; }
+.topic-progress { grid-template-columns: minmax(0,1fr) minmax(1.5rem,1fr) auto auto; }
+.topic-progress > span { text-align: right; }
 .practice-wrap { max-width: 755px; margin: 0 auto; }
 .practice-top { display: flex; align-items: center; justify-content: space-between; gap: .7rem; margin-bottom: .55rem; }
 .practice-card { margin-top: 1.15rem; padding: clamp(.9rem, 4vw, 2.15rem); box-shadow: var(--shadow); }
@@ -159,12 +161,22 @@ nav a:hover { background: #4d4131; color: #fff3da; }
 .answer-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .55rem; margin-top: .9rem; }
 .answer { border: 1px solid var(--line); border-radius: .7rem; background: var(--white); color: var(--ink); padding: .55rem; min-height: 55px; font-weight: 700; }
 .answer:not(:disabled):hover { border-color: #c17c5d; background: #fff5e9; }
-.answer[lang="zh-Hans"] { font-size: 1.36rem; }
+.answer[lang="zh-Hans"] { font-size: clamp(1.5rem,4vw,1.9rem); line-height: 1.35; overflow-wrap: anywhere; }
 .answer.correct { border-color: #7b9b7f; color: #245233; background: #e9f2e7; }
 .answer.incorrect { border-color: #df9b8b; color: #8e2b21; background: #fae8df; }
 .feedback { background: #f7f0e7; border-radius: .65rem; padding: .8rem .9rem; margin: .9rem 0; }
 .feedback.good { background: #eaf1e5; color: #254e31; }
 .feedback.bad { background: #f9e9df; color: #802d23; }
+.feedback-answer, .writing-review li { display: flex; align-items: center; gap: .7rem; }
+.review-glyph { padding: .06em .28em; border-radius: .2em; background: var(--white); color: var(--ink); font-size: clamp(1.55rem,5vw,2.3rem); font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; min-width: 0; }
+.writing-review { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap: .55rem; list-style: none; margin: .65rem 0 0; padding: 0; }
+.writing-review li { padding: .45rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.writing-review .review-glyph { flex: 0 0 auto; }
+.writing-review .review-glyph svg { width: 1.25em; height: 1.25em; }
+.writing-review p { font-size: .88rem; }
+.summary-writing { grid-column: 1 / -1; }
+.summary-writing summary { cursor: pointer; }
+.summary-line .term, .practice-content .translation [lang="zh-Hans"] { font-size: 1.5rem; }
 .practice-foot { display: flex; justify-content: space-between; gap: .65rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
 .center { justify-content: center; text-align: center; }
 .flash { width: 100%; display: grid; justify-items: center; gap: .28rem; padding: 1.2rem; color: var(--ink); background: #f7eddf; border: 1px dashed #d4ae94; border-radius: 1rem; }
@@ -203,6 +215,9 @@ dialog::backdrop { background: rgba(40,30,25,.64); }
 .voice-guide ol { margin: .35rem 0 .55rem; padding-inline-start: 1.4rem; }
 .voice-guide li + li { margin-top: .25rem; }
 .voice-guide a { text-decoration: underline; }
+.voice-guide h4 { margin: .35rem 0; }
+.voice-alternative { border-top: 1px solid var(--line); margin-top: .65rem; padding-top: .55rem; }
+.voice-alternative pre { padding: .55rem; background: var(--paper); white-space: pre-wrap; overflow-wrap: anywhere; }
 .detail-term { font-size: clamp(2.4rem,7vw,3.8rem); }
 .example-list { display: grid; gap: .5rem; padding: 0; list-style: none; }
 .example-list li { border: 1px solid var(--line); background: #faf5ec; border-radius: .6rem; padding: .6rem; }
@@ -221,6 +236,9 @@ dialog::backdrop { background: rgba(40,30,25,.64); }
   nav a { padding-inline: .58rem; }
 }
 @media (max-width: 680px) {
+  .topic-progress { grid-template-columns: minmax(0,1fr) auto auto; gap: .35rem; }
+  .topic-progress .progress-track { grid-row: 2; grid-column: 1 / -1; }
+  .training-stats th, .training-stats td { font-size: .86rem; padding-inline: .18rem; }
   .header-inner,.main { width: min(100% - 1.25rem, 1180px); }
   .header-inner { grid-template-columns: 1fr auto; gap: .35rem; padding: .55rem 0; }
   .header-inner nav { grid-column: 1/-1; grid-row: 2; width: 100%; justify-content: space-between; gap: .05rem; overflow: auto; scrollbar-width: thin; }

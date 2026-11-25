@@ -202,13 +202,34 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
       '<div class="actions center" id="ink-actions"></div></div>';
   }
 
-  function feedback(mark,word) {
+  function writingReview(word, history) {
+    if (!history?.length) return '';
+    const indices = values => Array.isArray(values) ? values.filter(value => Number.isSafeInteger(value) && value >= 0).sort((a,b) => a-b) : [];
+    const strokeNumbers = strokes => strokes.map(index => index+1).join(', ');
+    return '<ol class="writing-review" aria-label="Разбор по иероглифам">'+[...word.hanzi].map((character,index) => {
+      const item = history[index];
+      const missed = indices(item?.missed), missing = indices(item?.missing), extra = indices(item?.extra);
+      const highlight = missed.length ? missed : missing;
+      const details = [];
+      if (item?.manual) details.push('Самопроверка по образцу');
+      if (missed.length) details.push('Промахи на чертах № '+strokeNumbers(missed));
+      if (missing.length) details.push('Не совпали черты образца № '+strokeNumbers(missing));
+      if (extra.length) details.push('Не распознаны твои черты № '+strokeNumbers(extra));
+      if (item?.usedHint) details.push('Просмотрен порядок черт');
+      if (item?.mistakes && !details.length) details.push('Ошибок в чертах: '+item.mistakes);
+      return '<li><span class="review-glyph" lang="zh-Hans"'+(highlight.length ? ' data-stroke-reference="'+highlight.join(',')+'"' : '')+'>'+e(character)+'</span><div><strong>'+
+        (item ? item.correct ? 'Верно' : 'Стоит повторить' : 'Пропущен')+'</strong>'+
+        details.map(detail => '<p>'+e(detail)+'</p>').join('')+'</div></li>';
+    }).join('')+'</ol>';
+  }
+
+  function feedback(mark,word,history) {
     if (!mark) return '';
-    const detail = mark.value === 'writing' && typeof mark.detail === 'string' && mark.detail.endsWith('вручную.')
-      ? 'Часть знаков проверена вручную.' : mark.detail;
+    const review = writingReview(word,history);
     return '<div id="practice-feedback" tabindex="-1" class="feedback '+(mark.correct ? 'good' : 'bad')+'">'+
-      '<strong>'+(mark.value === 'skip' ? 'Пропуск' : mark.correct ? 'Верно' : 'Стоит повторить')+'</strong> · <strong lang="zh-Hans">'+e(word.hanzi)+'</strong> · '+
-      e(word.pinyin)+' · '+e(word.meaning)+(detail ? '<p>'+e(detail)+'</p>' : '')+'</div>';
+      '<div class="feedback-answer"><strong class="review-glyph" lang="zh-Hans">'+e(word.hanzi)+'</strong><div><strong>'+
+      (mark.value === 'skip' ? 'Пропуск' : mark.correct ? 'Верно' : 'Стоит повторить')+'</strong><p>'+e(word.pinyin)+' · '+e(word.meaning)+'</p></div></div>'+
+      (review || (mark.detail ? '<p>'+e(mark.detail)+'</p>' : ''))+'</div>';
   }
 
   function renderPractice() {
@@ -232,7 +253,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
       '<div class="progress-track" role="progressbar" aria-label="Ход тренировки" aria-valuenow="'+(s.index+1)+'" aria-valuemax="'+s.questions.length+'"><span style="width:'+((s.index+1)/s.questions.length*100)+'%"></span></div>'+
       '<article class="practice-card"><h1 id="question-title" tabindex="-1">'+title+'</h1><div class="practice-content">'+
       (q.mode === 'writing' ? renderWriting(word,s,mark) : q.mode === 'flash' ? renderFlash(word,s,mark) : renderedQuestion(q,word,mark)+optionGrid(q,mark))+
-      '</div>'+feedback(mark,word)+'<div class="practice-foot"><div class="actions">'+
+      '</div>'+feedback(mark,word,q.mode === 'writing' ? s.writing[s.index] : null)+'<div class="practice-foot"><div class="actions">'+
       (s.index > 0 ? button('Назад','previous') : '')+'</div>'+
       (mark ? button(s.index === s.questions.length-1 ? 'К результатам' : 'Следующий вопрос','next','',true) :
         button('Пропустить','skip-question'))+'</div></article></section>';
@@ -240,6 +261,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
       const offset = (s.writing[s.index] || []).length;
       writer = window.HanziWriting({character:[...word.hanzi][offset], finish:finishCharacter, ui});
     }
+    if (q.mode === 'writing' && mark) window.HanziWritingReferences(main);
   }
 
   function showSummary() {
@@ -253,14 +275,17 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     const rows = s.questions.map((q,index) => {
       const word = byId(q.id);
       const mark = s.answers[index];
-      return '<div class="progress-line"><button type="button" class="term" lang="zh-Hans" data-action="detail" data-value="'+e(word.id)+'">'+e(word.hanzi)+'</button>'+
-        '<span>'+e(word.meaning)+'</span><span class="pill '+(mark?.correct ? 'solid' : 'ready')+'">'+(mark?.correct ? 'Верно' : mark?.value === 'skip' ? 'Пропуск' : 'Повторить')+'</span></div>';
+      const review = q.mode === 'writing' ? writingReview(word,s.writing[index]) : '';
+      return '<div class="progress-line summary-line"><button type="button" class="term" lang="zh-Hans" data-action="detail" data-value="'+e(word.id)+'">'+e(word.hanzi)+'</button>'+
+        '<span>'+e(word.meaning)+'</span><span class="pill '+(mark?.correct ? 'solid' : 'ready')+'">'+(mark?.correct ? 'Верно' : mark?.value === 'skip' ? 'Пропуск' : 'Повторить')+'</span>'+
+        (review ? '<details class="summary-writing"'+(mark?.correct ? '' : ' open')+'><summary>Разбор по иероглифам</summary>'+review+'</details>' : '')+'</div>';
     }).join('');
     main.innerHTML = '<section class="practice-wrap">'+pageTitle('Тренировка завершена',scopeLabel(s)+' · '+modeById(s.mode).name)+
       '<div class="banner"><div><strong>Правильно '+s.correct+' из '+s.total+'</strong><p>Следующее повторение появится в очереди по результатам ответов.</p></div></div>'+
       '<div class="actions">'+(incorrect.length ? button('Повторить ошибки','retry','',true,'refresh') : '')+
       '<a class="button secondary" href="#progress">Посмотреть прогресс</a><a class="button secondary" href="#dict">К словарю</a></div>'+
       '<div class="section panel progress-list">'+rows+'</div></section>';
+    if (s.mode === 'writing') window.HanziWritingReferences(main);
   }
 
   function action(action,value) {

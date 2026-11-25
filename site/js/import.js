@@ -108,7 +108,9 @@ window.HanziImport = function ({Study,state,persist,rebuild,render,getWords,ui,t
         state.custom = Study.mergeCustom(state.custom,data);
       } else {
         const data = JSON.parse(await file.text());
-        if (data?.format === 'hanzi-study-2') {
+        if (data?.format === 'hanzi-materials-1') {
+          state.custom = Study.mergeCustom(state.custom,Study.readMaterials(data,getWords('all')));
+        } else if (data?.format === 'hanzi-study-2') {
           const incoming = Study.safeState(data.data);
           for (const [key,value] of Object.entries(incoming.progress)) {
             if (!value || (Study.getProgress(state,key)?.last || 0) >= (Number(value.last) || 0)) continue;
@@ -120,7 +122,7 @@ window.HanziImport = function ({Study,state,persist,rebuild,render,getWords,ui,t
           if (!state.active && incoming.active?.writing) state.active = incoming.active;
         } else if (hasData(data)) {
           state.custom = Study.mergeCustom(state.custom,Study.fromLegacy(data,getWords('all')));
-        } else throw new Error('Этот JSON не похож на резервную копию тренажёра.');
+        } else throw new Error('Этот JSON не похож на файл материалов или резервную копию тренажёра.');
       }
       refresh();
       status.textContent = 'Импорт завершён. Новых слов в словаре: '+(getWords('all').length-before)+'.';

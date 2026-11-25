@@ -39,6 +39,30 @@
     characterData.get(character).then(success,failure);
   }
 
+  function renderReference(target,character,model,highlighted) {
+    const ns='http://www.w3.org/2000/svg';
+    const image=document.createElementNS(ns,'svg');
+    image.setAttribute('viewBox','-55 -955 1134 1134');
+    image.setAttribute('aria-label','Образец знака '+character);
+    image.setAttribute('role','img');
+    model.strokes.forEach((value,index)=>{
+      const path=document.createElementNS(ns,'path');
+      path.setAttribute('d',value);
+      path.setAttribute('transform','scale(1,-1)');
+      path.setAttribute('fill',highlighted.includes(index) ? '#a33b2c' : '#4d2c21');
+      image.append(path);
+    });
+    target.replaceChildren(image);
+  }
+
+  window.HanziWritingReferences = root => {
+    for (const target of root.querySelectorAll('[data-stroke-reference]')) {
+      const character = target.textContent;
+      const highlighted = target.dataset.strokeReference.split(',').map(Number);
+      loadCharacter(character,model => renderReference(target,character,model,highlighted),()=>{});
+    }
+  };
+
   const distance = ([ax,ay],[bx,by]) => Math.hypot(ax-bx,ay-by);
 
   function sampleStroke(points, lengths, total) {
@@ -103,6 +127,7 @@
     let fallbackActive = false;
     let showing = false;
     let mistakes = 0;
+    const missedStrokes = new Set();
     let usedHint = false;
     let resize;
     let complete = false;
@@ -169,19 +194,7 @@
           target.textContent=character;
           return;
         }
-        const ns='http://www.w3.org/2000/svg';
-        const image=document.createElementNS(ns,'svg');
-        image.setAttribute('viewBox','-55 -955 1134 1134');
-        image.setAttribute('aria-label','Образец знака '+character);
-        image.setAttribute('role','img');
-        model.strokes.forEach((value,i)=>{
-          const path=document.createElementNS(ns,'path');
-          path.setAttribute('d',value);
-          path.setAttribute('transform','scale(1,-1)');
-          path.setAttribute('fill',missing.includes(i) ? '#a33b2c' : '#4d2c21');
-          image.append(path);
-        });
-        target.append(image);
+        renderReference(target,character,model,missing);
       }
 
       const initial = 'Напиши знак без контура, затем нажми «Проверить».';
@@ -221,7 +234,7 @@
         }
         const {extra,missing}=compareStrokes(strokes,model.medians);
         const correct=!extra.length&&!missing.length;
-        result={correct,mistakes:Math.max(extra.length,missing.length),manual:false,free:true};
+        result={correct,mistakes:Math.max(extra.length,missing.length),manual:false,free:true,missing,extra};
         ctx.clearRect(0,0,canvas.width,canvas.height);
         strokes.forEach((stroke,i)=>paintStroke(stroke,extra.includes(i) ? '#a33b2c' : '#4d2c21'));
         showReference(missing);
@@ -251,8 +264,9 @@
       if (disposed || fallbackActive) return;
       info.textContent = 'Пиши по одной черте. После двух промахов появится подсказка.';
       instance.quiz({showHintAfterMisses:2,highlightOnComplete:false,
-        onMistake: () => {
+        onMistake: ({strokeNum}) => {
           mistakes++;
+          if (Number.isInteger(strokeNum)) missedStrokes.add(strokeNum);
           info.textContent = 'Попробуй эту черту ещё раз.';
         },
         onCorrectStroke: data => {
@@ -261,7 +275,7 @@
         onComplete: () => {
           if (disposed || complete) return;
           complete = true;
-          finish({correct:mistakes === 0 && !usedHint,mistakes,manual:false});
+          finish({correct:mistakes === 0 && !usedHint,mistakes,manual:false,missed:[...missedStrokes],usedHint});
         }});
     }
 

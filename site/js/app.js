@@ -33,6 +33,7 @@
   const formatDate = timestamp => new Intl.DateTimeFormat('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(timestamp);
   const wholeExample = (word, example) => example.prompt.replace('__',word.hanzi);
   function examplePinyin(word, example) {
+    if (example.reviewedPinyin && example.pinyin) return '<p class="sentence-pinyin" lang="zh-Latn">'+escape(example.pinyin)+'</p>';
     const reading = window.pinyinPro.pinyin(wholeExample(word,example),{type:'all'})
       .map(item => item.isZh ? item.pinyin : ({'。':'.','，':',','？':'?','！':'!','；':';','：':':'}[item.origin] || item.origin))
       .join(' ').replace(/\s+([.,?!;:])/g,'$1').trim();
@@ -45,7 +46,9 @@
   ];
   function exampleFootnote(word, example) {
     const parts = wholeExample(word,example);
-    return contextGlossary.filter(note => word.hanzi !== note.hanzi && parts.includes(note.hanzi))
+    const notes = new Map(contextGlossary.filter(note => word.hanzi !== note.hanzi && parts.includes(note.hanzi)).map(note => [note.hanzi,note]));
+    for (const note of example.notes || []) notes.set(note.hanzi,note);
+    return [...notes.values()]
       .map(note => '<p class="example-note"><b lang="zh-Hans">'+escape(note.hanzi)+'</b> '+escape(note.pinyin)+' — '+escape(note.meaning)+'</p>').join('');
   }
   const ui = {escape, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, formatDate, exampleFootnote, examplePinyin};
@@ -153,11 +156,20 @@
     const details = (device) => '<details'+(device === platform ? ' open' : '')+'>';
     return '<section class="voice-guide" id="voice-guide" aria-labelledby="voice-guide-title"'+(hidden ? ' hidden' : '')+'>'+
       '<h3 id="voice-guide-title" tabindex="-1">Установка голоса</h3>'+
-      details('windows')+'<summary>Windows</summary><ol>'+
+      details('windows')+'<summary>Windows</summary><h4>Установка через параметры Windows</h4><ol>'+
       '<li>Открой «Параметры» → «Время и язык» → «Язык и регион». В Windows 10 этот раздел называется «Язык».</li>'+
       '<li>В разделе «Предпочитаемые языки» нажми «Добавить язык» и выбери «Китайский (упрощённый, Китай)». Оставь выключенной опцию «Сделать языком интерфейса Windows».</li>'+
       '<li>При установке отметь «Преобразование текста в речь». Если китайский уже добавлен, нажми «⋯» рядом с ним → «Языковые параметры» и скачай там «Преобразование текста в речь». В Windows 10 выбери китайский в списке и нажми «Параметры».</li></ol>'+
-      '<a href="https://support.microsoft.com/ru-ru/windows/hardware/input-devices/manage-the-language-and-keyboard-input-layout-settings-in-windows" target="_blank" rel="noopener">Справка Microsoft</a></details>'+
+      '<a href="https://support.microsoft.com/ru-ru/windows/hardware/input-devices/manage-the-language-and-keyboard-input-layout-settings-in-windows" target="_blank" rel="noopener">Справка Microsoft</a>'+
+      '<h4>Добавление голоса в разделе «Речь»</h4><ol>'+
+      '<li>Нажми Win + Ctrl + N, чтобы открыть параметры экранного диктора. В разделе его голоса выбери «Добавить устаревшие голоса». Откроются параметры речи.</li>'+
+      '<li>Нажми «Добавление голосов» в разделе управления голосами и выбери китайский (Китай). Дождись загрузки и проверь голос на сайте.</li></ol>'+
+      '<a href="https://support.microsoft.com/en-us/accessibility/windows/narrator/appendix-a-supported-languages-and-voices" target="_blank" rel="noopener">Голоса Windows в справке Microsoft</a>'+
+      '<details class="voice-alternative"><summary>Запасной способ через PowerShell</summary>'+
+      '<p>Если скачать голос через параметры не получилось, открой Windows PowerShell от имени администратора. Запусти команды по одной и дождись завершения каждой.</p>'+
+      '<pre><code>Add-WindowsCapability -Online -Name Language.Basic~~~zh-CN~0.0.1.0\nAdd-WindowsCapability -Online -Name Language.TextToSpeech~~~zh-CN~0.0.1.0\nGet-WindowsCapability -Online -Name Language.TextToSpeech~~~zh-CN~0.0.1.0</code></pre>'+
+      '<p>Статус <code>Installed</code> означает, что пакет установлен. Затем перезапусти браузер и нажми «Проверить голос».</p>'+
+      '<a href="https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/features-on-demand-language-fod?view=windows-11" target="_blank" rel="noopener">Языковые пакеты Windows</a></details></details>'+
       details('mac')+'<summary>macOS</summary><ol>'+
       '<li>Открой меню Apple → «Системные настройки» → «Универсальный доступ» → «Чтение вслух» (Read &amp; Speak). Название в других версиях macOS может быть «Устный контент» (Spoken Content).</li>'+
       '<li>Открой «Системный голос» → «Управление голосами». Найди мандаринский китайский (Китай) и скачай один из голосов.</li></ol>'+
@@ -216,7 +228,7 @@
     const learned = words.filter(w => Study.getProgress(state,w.id)?.level >= 3).length;
     return '<section class="hero"><div class="hero-copy"><p class="hero-hanzi" lang="zh-Hans">进击的汉字</p><h1 lang="en">Attack on <span>Hànzì</span></h1><div class="actions">'+
       (due ? '<a class="button primary" href="#review">'+icon('refresh')+'К повторению</a>' : button('Начать с карточек','configure','all',true,'cards'))+
-      '<a class="button secondary" href="#topics">Темы словаря</a></div></div><img class="hero-picture" src="assets/bao-hero.jpg" width="760" height="760" alt="Удивлённая булочка баоцзы с каллиграфической кистью выглядывает из-за крепостной стены" fetchpriority="high"></section>'+
+      '<a class="button secondary" href="#topics">Темы словаря</a></div></div><img class="hero-picture" src="assets/character/bao-hero.jpg" width="760" height="760" alt="Удивлённая булочка баоцзы с каллиграфической кистью выглядывает из-за крепостной стены" fetchpriority="high"></section>'+
       '<section class="stat-grid" aria-label="Сводка словаря">'+stat(words.length,'слов в словаре','book')+stat(learned,'закреплено','check')+stat(due,'к повторению','clock')+'</section>'+
       (practice.canResume() ? '<aside class="banner"><div><strong>Тренировка не закончена</strong><p>'+escape(practice.resumeLabel())+'</p></div><a class="button primary" href="#practice">Продолжить</a></aside>' : '')+
       '<section class="section" id="topics"><div class="section-head"><h2 tabindex="-1">Темы словаря</h2><a class="button secondary" href="#dict">Весь словарь</a></div><div class="topic-grid">'+categories.filter(c => getWords(c.id).length).map(topicCard).join('')+'</div></section>'+
@@ -304,32 +316,40 @@
     const total = results.reduce((sum,p) => sum + p.attempts,0);
     const correct = results.reduce((sum,p) => sum + p.correct,0);
     const learned = results.filter(p => p.level >= 3).length;
-    const byMode = new Map(Study.displayModes.map(mode => [mode.id,{sessions:0,answered:0}]));
+    const byMode = new Map(Study.displayModes.map(mode => [mode.id,{sessions:0,answered:0,correct:0}]));
     let answered = 0;
     for (const session of state.sessions) {
       const counts = byMode.get(session.mode);
       const answers = session.answered ?? session.total;
       counts.sessions += 1;
       counts.answered += answers;
+      counts.correct += session.correct;
       answered += answers;
     }
     return pageTitle('Прогресс','Закреплёнными считаются слова, которые ты правильно вспомнил на нескольких повторениях.')+
       '<div class="stat-grid">'+stat(results.length,'слов в изучении','book')+stat(learned,'закреплено','check')+stat(total ? Math.round(correct/total*100) : 0,'точность, %','target')+'</div>'+
       '<section class="training-stats" aria-labelledby="training-stats-title"><div class="section-head"><h2 id="training-stats-title">Статистика тренировок</h2></div>'+
       '<div class="stat-grid training-stats-totals">'+stat(state.sessions.length,'завершено тренировок','chart')+stat(answered,'ответов в тренировках','check')+'</div>'+
-      '<div class="panel progress-list"><table aria-label="Статистика по типам заданий"><thead><tr><th scope="col">Тип задания</th><th scope="col">Тренировки</th><th scope="col">Ответы</th></tr></thead><tbody>'+
+      '<div class="panel progress-list"><table aria-label="Статистика по типам заданий"><thead><tr><th scope="col">Тип задания</th><th scope="col">Тесты</th><th scope="col">Ответы</th><th scope="col">Точность</th></tr></thead><tbody>'+
       Study.displayModes.map(mode => {
         const counts = byMode.get(mode.id);
-        return '<tr><th scope="row">'+escape(mode.name)+'</th><td>'+number.format(counts.sessions)+'</td><td>'+number.format(counts.answered)+'</td></tr>';
+        return '<tr><th scope="row">'+escape(mode.name)+'</th><td>'+number.format(counts.sessions)+'</td><td>'+number.format(counts.answered)+'</td><td>'+accuracy(counts.correct,counts.answered)+'</td></tr>';
       }).join('')+'</tbody></table></div>'+
       (state.sessions.some(session => session.answered === undefined) ? '<p class="small">В старых тренировках в число ответов могут входить пропуски.</p>' : '')+'</section>'+
       '<section><div class="section-head"><h2>По темам</h2></div><div class="panel progress-list">'+categories.map(category => {
         const all = getWords(category.id);
-        const known = all.filter(word => Study.getProgress(state,word.id)?.level >= 3).length;
-        return '<div class="progress-line"><a href="#dict/'+encodeURIComponent(category.id)+'"><strong>'+escape(category.name)+'</strong></a><div class="progress-track" role="progressbar" aria-label="'+escape(category.name)+'" aria-valuenow="'+known+'" aria-valuemax="'+Math.max(1,all.length)+'"><span style="width:'+(all.length ? known/all.length*100 : 0)+'%"></span></div>'+small(known+' из '+all.length)+'</div>';
+        const practiced = all.map(word => Study.getProgress(state,word.id)).filter(Boolean);
+        const known = practiced.filter(item => item.level >= 3).length;
+        const attempts = practiced.reduce((sum,item) => sum + item.attempts,0);
+        const correct = practiced.reduce((sum,item) => sum + item.correct,0);
+        return '<div class="progress-line topic-progress"><a href="#dict/'+encodeURIComponent(category.id)+'"><strong>'+escape(category.name)+'</strong></a><div class="progress-track" role="progressbar" aria-label="'+escape(category.name)+'" aria-valuenow="'+known+'" aria-valuemax="'+Math.max(1,all.length)+'"><span style="width:'+(all.length ? known/all.length*100 : 0)+'%"></span></div>'+small(known+' из '+all.length)+small('Точность '+accuracy(correct,attempts))+'</div>';
       }).join('')+'</div></section>'+
       '<section class="section"><div class="section-head"><h2>Последние тренировки</h2></div>'+
       (state.sessions.length ? '<div class="panel progress-list">'+state.sessions.slice(0,8).map(s => '<div class="progress-line"><strong>'+escape(scopeName(s.scope))+'</strong>'+small(Study.displayModes.find(m => m.id === s.mode)?.name || 'Тренировка')+small(s.correct+' / '+s.total+' · '+formatDate(s.time))+'</div>').join('')+'</div>' : placeholder('Здесь появятся результаты завершённых тренировок.'))+'</section>';
+  }
+
+  function accuracy(correct,total) {
+    return total ? number.format(Math.round(correct / total * 100))+'%' : '—';
   }
 
   const positionInfo = {
