@@ -54,7 +54,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     if (!pool.length) return toast('В этом наборе пока нет слов.');
     template = {scope, label:single ? single.hanzi : getScopeName(scope), pool:scope === 'due' ? pool : Study.shuffle(pool)};
     setDialog('Настройка тренировки','<p><strong>'+e(template.label)+'</strong></p>'+
-      (canResume() ? '<p class="small">Новая тренировка заменит текущую сессию. Уже оценённые ответы сохранены.</p><div class="actions"><a class="button secondary" href="#practice" data-action="close-dialog">Продолжить текущую</a></div>' : '')+
+      (canResume() ? '<p class="small">Новая тренировка заменит незавершённую. Прогресс по словам сохранится.</p><div class="actions"><a class="button secondary" href="#practice" data-action="close-dialog">Продолжить текущую</a></div>' : '')+
       '<form id="setup-form"><div class="filters"><label>Режим<select id="study-mode" name="mode" class="field">'+modes.map(m =>
         '<option value="'+m.id+'"'+(mode === m.id ? ' selected' : '')+'>'+m.name+'</option>').join('')+'</select></label>'+
       '<label>Размер набора<select id="limit" name="limit" class="field"></select></label>'+
@@ -145,7 +145,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     }
     const mistakes = history.reduce((sum,item) => sum + item.mistakes,0);
     const manual = history.some(item => item.manual);
-    const detail = manual ? 'Есть знаки, оценённые вручную.' : mistakes ? 'Ошибок в чертах: '+mistakes+'.' : 'Все знаки написаны по порядку.';
+    const detail = manual ? 'Часть знаков проверена вручную.' : mistakes ? 'Ошибок в чертах: '+mistakes+'.' : 'Все знаки написаны по порядку.';
     answer('writing',history.every(item => item.correct),detail);
   }
 
@@ -154,7 +154,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     const turned = mark || revealed;
     return '<button type="button" class="flash" data-action="reveal" aria-expanded="'+Boolean(turned)+'">'+
       '<strong class="term-large"'+(fromMeaning ? '' : ' lang="zh-Hans"')+'>'+e(fromMeaning ? word.meaning : word.hanzi)+'</strong>'+
-      '<span class="small">'+(turned ? (mark ? 'Карточка оценена' : 'Скрыть ответ') : 'Показать ответ')+'</span></button>'+
+      (mark ? '' : '<span class="small">'+(turned ? 'Скрыть ответ' : 'Показать ответ')+'</span>')+'</button>'+
       (turned ? '<p class="translation">'+(fromMeaning ? '<strong lang="zh-Hans">'+e(word.hanzi)+'</strong> · ' : '')+
         e(word.pinyin)+(fromMeaning ? '' : ' · '+e(word.meaning))+'</p><div class="actions center">'+iconButton('Произнести','volume','speak-word',word.id)+'</div>' : '')+
       (turned && !mark ? '<div class="actions center flash-rating">'+button('Ещё учу','flash-rate','no',false)+button('Вспомнил','flash-rate','yes',true)+'</div>' : '');
@@ -202,9 +202,11 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
 
   function feedback(mark,word) {
     if (!mark) return '';
+    const detail = mark.value === 'writing' && typeof mark.detail === 'string' && mark.detail.endsWith('вручную.')
+      ? 'Часть знаков проверена вручную.' : mark.detail;
     return '<div id="practice-feedback" tabindex="-1" class="feedback '+(mark.correct ? 'good' : 'bad')+'">'+
       '<strong>'+(mark.value === 'skip' ? 'Пропуск' : mark.correct ? 'Верно' : 'Стоит повторить')+'</strong> · <strong lang="zh-Hans">'+e(word.hanzi)+'</strong> · '+
-      e(word.pinyin)+' · '+e(word.meaning)+(mark.detail ? '<p>'+e(mark.detail)+'</p>' : '')+'</div>';
+      e(word.pinyin)+' · '+e(word.meaning)+(detail ? '<p>'+e(detail)+'</p>' : '')+'</div>';
   }
 
   function renderPractice() {
@@ -224,8 +226,8 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     }
     const title = {flash:'Вспомни слово',choice:'Выбери иероглиф',sentence:'Вставь пропущенное слово',writing:'Напиши по чертам',listen:'Послушай и выбери перевод'}[q.mode];
     main.innerHTML = '<section class="practice-wrap"><div class="practice-top"><span class="small">'+e(scopeLabel(s))+' · '+e(modeById(q.mode).name)+'</span>'+
-      '<a class="quiet" href="#home">Выйти</a></div><div class="practice-top"><strong>Вопрос '+(s.index+1)+' из '+s.questions.length+'</strong>'+
-      small(Object.keys(s.answers).length+' оценено')+'</div><div class="progress-track" role="progressbar" aria-label="Ход тренировки" aria-valuenow="'+(s.index+1)+'" aria-valuemax="'+s.questions.length+'"><span style="width:'+((s.index+1)/s.questions.length*100)+'%"></span></div>'+
+      '<a class="quiet" href="#home">Выйти</a></div><div class="practice-top"><strong>Вопрос '+(s.index+1)+' из '+s.questions.length+'</strong></div>'+
+      '<div class="progress-track" role="progressbar" aria-label="Ход тренировки" aria-valuenow="'+(s.index+1)+'" aria-valuemax="'+s.questions.length+'"><span style="width:'+((s.index+1)/s.questions.length*100)+'%"></span></div>'+
       '<article class="practice-card"><h1 id="question-title" tabindex="-1">'+title+'</h1><div class="practice-content">'+
       (q.mode === 'writing' ? renderWriting(word,s,mark) : q.mode === 'flash' ? renderFlash(word,s,mark) : renderedQuestion(q,word,mark)+optionGrid(q,mark))+
       '</div>'+feedback(mark,word)+'<div class="practice-foot"><div class="actions">'+

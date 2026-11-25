@@ -59,7 +59,7 @@
   }
 
   function resetState() {
-    return {progress:{}, favorites:[], custom:[], sessions:[], active:null, migrated:false, direction:'hanzi'};
+    return {progress:{}, favorites:[], custom:[], sessions:[], active:null, migrated:false, direction:'hanzi', hideAudioNotice:false};
   }
 
   function safeState(value) {
@@ -72,7 +72,8 @@
       sessions: Array.isArray(value.sessions) ? value.sessions.filter(item => item && Number.isFinite(item.time)).slice(0, 100) : [],
       active: value.active && Array.isArray(value.active.questions) ? value.active : null,
       migrated: value.migrated === true,
-      direction: value.direction === 'meaning' ? 'meaning' : 'hanzi'
+      direction: value.direction === 'meaning' ? 'meaning' : 'hanzi',
+      hideAudioNotice: value.hideAudioNotice === true
     };
   }
 

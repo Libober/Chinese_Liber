@@ -51,6 +51,7 @@
   let route = {page:'home', key:'all'};
   let dictionaryQuery = '';
   let dictionaryStatus = 'all';
+  let audioVisit = null;
 
   function rebuild() {
     words = Study.buildVocabulary(state.custom);
@@ -80,11 +81,17 @@
     toastTimer = setTimeout(() => { status.hidden = true; }, 4000);
   }
 
-  function speak(text, slow = false, reading = '') {
-    if (!('speechSynthesis' in window)) return toast('На этом устройстве озвучка недоступна.');
-    const voices = speechSynthesis.getVoices().filter(voice => /^zh([-_]|$)/i.test(voice.lang));
-    const voice = voices.find(v => /^zh[-_](CN|Hans)/i.test(v.lang)) || voices[0];
-    if (!voice) return toast('Установи китайский голос в настройках устройства, чтобы включить озвучку.');
+  function speak(text, slow = false, reading = '', report) {
+    const voices = window.speechSynthesis?.getVoices() || [];
+    const voice = voices.find(v => /^zh[-_](CN|Hans|SG)([-_]|$)/i.test(v.lang)) ||
+      voices.find(v => /^cmn([-_]|$)|^zh(?:[-_](?:Hant[-_])?TW)?$/i.test(v.lang));
+    if (!voice) {
+      const message = 'Браузер пока не видит китайский голос.';
+      if (report) report(message);
+      else if (route.page === 'practice') showVoiceHelp(message);
+      else toast(message+' Инструкция есть в настройках сайта.');
+      return;
+    }
     speechSynthesis.cancel();
     // A bare polyphonic character often gets the default reading. Use a short phrase to disambiguate.
     const samples = {'只|zhi': reading === 'zhī' ? '一只' : '只有', '还|hai':'还有','为|wei':'为了','会|hui':'我会','了|le':'好了'};
@@ -94,8 +101,11 @@
     utterance.voice = voice;
     utterance.rate = slow ? .68 : .88;
     utterance.onerror = event => {
-      if (!['canceled','interrupted'].includes(event.error)) toast('Устройство не смогло воспроизвести китайскую озвучку.');
+      if (!['canceled','interrupted'].includes(event.error)) {
+        (report || toast)('Голос найден, но воспроизведение не удалось. Проверь звук и перезапусти браузер.');
+      }
     };
+    if (report) report('Найден голос «'+voice.name+'». Звучит «你好» — «привет».');
     speechSynthesis.speak(utterance);
   }
 
@@ -120,6 +130,40 @@
   function setDialog(title, content) {
     dialog.innerHTML = '<div class="dialog-body"><div class="dialog-head"><h2 id="dialog-title">'+escape(title)+'</h2>'+iconButton('Закрыть','x','close-dialog')+'</div>'+content+'</div>';
     if (!dialog.open) dialog.showModal();
+  }
+
+  function voiceInstructions(hidden = false) {
+    return '<section class="voice-guide" id="voice-guide" aria-labelledby="voice-guide-title"'+(hidden ? ' hidden' : '')+'>'+
+      '<h3 id="voice-guide-title" tabindex="-1">Установка голоса</h3>'+
+      '<details open><summary>Windows 11</summary><p>Открой «Параметры» → «Время и язык» → «Речь» или «Голосовые функции» → «Управление голосами» → «Добавить голоса». Выбери «Китайский (упрощённый, Китай)» и дождись загрузки.</p>'+
+      '<a href="https://support.microsoft.com/ru-ru/accessibility/windows/narrator/appendix-a-supported-languages-and-voices" target="_blank" rel="noopener">Справка Microsoft</a></details>'+
+      '<details><summary>macOS</summary><p>Открой «Системные настройки» → «Универсальный доступ» → «Чтение и речь» (Read &amp; Speak). В меню системного голоса выбери «Управление голосами» и скачай голос для мандаринского китайского.</p>'+
+      '<a href="https://support.apple.com/en-us/guide/mac-help/mchlp2290/mac" target="_blank" rel="noopener">Справка Apple для Mac</a></details>'+
+      '<details><summary>iPhone и iPad</summary><p>Открой «Настройки» → «Универсальный доступ» → «Чтение и речь» или «Устный контент» → «Голоса». Выбери китайский (мандаринский) и скачай голос.</p>'+
+      '<a href="https://support.apple.com/en-ie/guide/iphone/iph96b214f0/ios" target="_blank" rel="noopener">Справка Apple для iPhone</a></details>'+
+      '<details><summary>Android</summary><p>В настройках найди «Синтез речи». Открой настройки выбранного модуля, нажми «Установить голосовые данные» и выбери китайский (Китай).</p>'+
+      '<a href="https://support.google.com/accessibility/android/answer/6006983?hl=ru" target="_blank" rel="noopener">Справка Google</a></details>'+
+      '<p>После загрузки перезапусти браузер, снова открой сайт и проверь озвучку.</p>'+
+      '<div class="actions">'+button('Проверить голос','voice-test','',false,'volume')+'</div>'+
+      '<p id="voice-test-status" class="small" role="status"></p></section>';
+  }
+
+  function showVoiceHelp(message = '') {
+    setDialog('Как установить китайский голос',
+      (message ? '<p>'+escape(message)+'</p>' : '')+voiceInstructions()+
+      '<div class="actions">'+button('Готово','close-dialog','',true)+'</div>');
+    dialog.querySelector('#voice-guide-title').focus({preventScroll:true});
+  }
+
+  function showAudioNotice() {
+    setDialog('Перед аудиотренировкой',
+      '<p>Для заданий на слух нужен китайский голос (путунхуа). Если браузер его не видит, скачай голос в настройках устройства.</p>'+
+      '<label class="voice-preference"><input type="checkbox" id="hide-audio-notice"> Больше не показывать</label>'+
+      '<div class="actions"><button type="button" class="button secondary" data-action="voice-guide" aria-controls="voice-guide" aria-expanded="false">Как установить голос</button>'+
+      button('Продолжить','close-dialog','',true)+'</div>'+voiceInstructions(true));
+    const title = dialog.querySelector('#dialog-title');
+    title.tabIndex = -1;
+    title.focus({preventScroll:true});
   }
 
   const practice = window.HanziPractice({Study,state,main,ui, getWords, categoryName, byId:id => byId.get(id),
@@ -274,9 +318,13 @@
 
   function render() {
     practice.cleanup();
+    const listening = route.page === 'practice' && state.active?.mode === 'listen' && practice.canResume() ? state.active : null;
+    const showNotice = listening && listening !== audioVisit && !state.hideAudioNotice;
+    audioVisit = listening;
     nav.innerHTML = links.map(([id,label,symbol]) => '<a href="#'+id+'"'+(id === route.page ? ' aria-current="page"' : '')+'>'+icon(symbol,16)+escape(label)+'</a>').join('');
     if (route.page === 'practice' || route.page === 'summary') {
       practice.render(route.page);
+      if (showNotice) showAudioNotice();
       return;
     }
     if (route.page === 'dict') {
@@ -310,7 +358,7 @@
       heading.scrollIntoView();
     } else {
       window.scrollTo(0,0);
-      main.focus({preventScroll:true});
+      if (!dialog.open) main.focus({preventScroll:true});
     }
   }
 
@@ -324,7 +372,16 @@
     if (action === 'close-dialog') {
       if (dialog.open) dialog.close();
     } else if (action === 'settings') imports.settings();
-    else if (action === 'export') imports.exportBackup();
+    else if (action === 'voice-help') showVoiceHelp();
+    else if (action === 'voice-guide') {
+      const guide = dialog.querySelector('#voice-guide');
+      guide.hidden = !guide.hidden;
+      control.setAttribute('aria-expanded',String(!guide.hidden));
+      if (!guide.hidden) guide.querySelector('h3').focus();
+    } else if (action === 'voice-test') {
+      const feedback = dialog.querySelector('#voice-test-status');
+      speak('你好',false,'',message => { feedback.textContent = message; });
+    } else if (action === 'export') imports.exportBackup();
     else if (action === 'configure' || action === 'configure-word') {
       practice.configure(action === 'configure-word' ? 'one' : value, mode || (action === 'configure-word' ? 'writing' : 'flash'),
         action === 'configure-word' ? byId.get(value) : null, scopeName);
@@ -358,15 +415,19 @@
       dictionaryStatus = value;
       filterDictionary();
     } else if (id === 'import-file') imports.importFile(event.target);
-    else practice.change(id,value);
+    else if (id === 'hide-audio-notice') {
+      state.hideAudioNotice = event.target.checked;
+      persist();
+    } else practice.change(id,value);
   });
   document.addEventListener('submit', event => {
     if (event.target.id !== 'setup-form') return;
     event.preventDefault();
-    if (practice.start(new FormData(event.target)) && dialog.open) dialog.close();
+    if (practice.start(new FormData(event.target)) && dialog.open && dialog.contains(event.target)) dialog.close();
   });
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
   window.addEventListener('hashchange',updateRoute);
+  window.speechSynthesis?.getVoices();
   rebuild();
   updateRoute();
   imports.migrate();

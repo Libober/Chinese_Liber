@@ -59,7 +59,7 @@
       finish({correct,mistakes:0,manual:true});
     };
 
-    function fallback(message = 'Порядок черт не загрузился. Можно написать знак и оценить себя.') {
+    function fallback(message = 'Порядок черт не загрузился. Можно написать знак и свериться с образцом.') {
       if (disposed || fallbackActive) return;
       fallbackActive = true;
       instance?.cancelQuiz();

@@ -5,11 +5,15 @@ window.HanziImport = function ({Study,state,persist,rebuild,render,getWords,ui,t
   const refresh = () => { persist(); rebuild(); render(); };
 
   function settings() {
-    setDialog('Материалы и резервная копия',
+    setDialog('Настройки',
+      '<h3>Материалы и резервная копия</h3>'+
       '<p>Добавь слова из DOCX или перенеси прогресс из JSON.</p>'+
       '<div class="actions">'+button('Скачать резервную копию','export')+
       '<label class="button primary file-action">Загрузить DOCX или JSON<input id="import-file" type="file" accept=".docx,.json"></label></div>'+
-      '<p id="import-status" class="small" role="status">Загружаемые файлы обрабатываются в браузере.</p>');
+      '<p id="import-status" class="small" role="status">Загружаемые файлы обрабатываются в браузере.</p>'+
+      '<h3>Озвучка</h3>'+
+      '<div class="actions">'+button('Как установить голос','voice-help')+'</div>'+
+      '<label class="voice-preference"><input type="checkbox" id="hide-audio-notice"'+(state.hideAudioNotice ? ' checked' : '')+'> Больше не показывать предупреждение при входе в аудио</label>');
   }
 
   function exportBackup() {
