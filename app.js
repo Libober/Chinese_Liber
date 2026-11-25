@@ -32,6 +32,12 @@
   const small = text => '<span class="small">'+escape(text)+'</span>';
   const formatDate = timestamp => new Intl.DateTimeFormat('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(timestamp);
   const wholeExample = (word, example) => example.prompt.replace('__',word.hanzi);
+  function examplePinyin(word, example) {
+    const reading = window.pinyinPro.pinyin(wholeExample(word,example),{type:'all'})
+      .map(item => item.isZh ? item.pinyin : ({'。':'.','，':',','？':'?','！':'!','；':';','：':':'}[item.origin] || item.origin))
+      .join(' ').replace(/\s+([.,?!;:])/g,'$1').trim();
+    return '<p class="sentence-pinyin" lang="zh-Latn">'+escape(reading)+'</p>';
+  }
   const contextGlossary = [
     {hanzi:'箱子',pinyin:'xiāngzi',meaning:'коробка'},
     {hanzi:'每天',pinyin:'měitiān',meaning:'каждый день'},
@@ -42,7 +48,7 @@
     return contextGlossary.filter(note => word.hanzi !== note.hanzi && parts.includes(note.hanzi))
       .map(note => '<p class="example-note"><b lang="zh-Hans">'+escape(note.hanzi)+'</b> '+escape(note.pinyin)+' — '+escape(note.meaning)+'</p>').join('');
   }
-  const ui = {escape, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, formatDate, exampleFootnote};
+  const ui = {escape, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, formatDate, exampleFootnote, examplePinyin};
   let saved;
   try { saved = JSON.parse(localStorage.getItem(Study.stateKey)); } catch { saved = null; }
   const state = Study.safeState(saved);
@@ -135,8 +141,10 @@
   function voiceInstructions(hidden = false) {
     return '<section class="voice-guide" id="voice-guide" aria-labelledby="voice-guide-title"'+(hidden ? ' hidden' : '')+'>'+
       '<h3 id="voice-guide-title" tabindex="-1">Установка голоса</h3>'+
-      '<details open><summary>Windows 11</summary><p>Открой «Параметры» → «Время и язык» → «Речь» или «Голосовые функции» → «Управление голосами» → «Добавить голоса». Выбери «Китайский (упрощённый, Китай)» и дождись загрузки.</p>'+
-      '<a href="https://support.microsoft.com/ru-ru/accessibility/windows/narrator/appendix-a-supported-languages-and-voices" target="_blank" rel="noopener">Справка Microsoft</a></details>'+
+      '<details open><summary>Windows 11</summary><p>Если кнопка добавления голосов не сработала, открой Windows PowerShell от имени администратора и выполни команды по очереди:</p>'+
+      '<pre class="voice-command">Add-WindowsCapability -Online -Name Language.Basic~~~zh-CN~0.0.1.0\nAdd-WindowsCapability -Online -Name Language.TextToSpeech~~~zh-CN~0.0.1.0\nGet-WindowsCapability -Online -Name Language.TextToSpeech~~~zh-CN~0.0.1.0</pre>'+
+      '<p>Если в результате указано Installed, полностью закрой и снова открой браузер, затем проверь голос на сайте.</p>'+
+      '<a href="https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/features-on-demand-language-fod?view=windows-11" target="_blank" rel="noopener">Справка Microsoft</a></details>'+
       '<details><summary>macOS</summary><p>Открой «Системные настройки» → «Универсальный доступ» → «Чтение и речь» (Read &amp; Speak). В меню системного голоса выбери «Управление голосами» и скачай голос для мандаринского китайского.</p>'+
       '<a href="https://support.apple.com/en-us/guide/mac-help/mchlp2290/mac" target="_blank" rel="noopener">Справка Apple для Mac</a></details>'+
       '<details><summary>iPhone и iPad</summary><p>Открой «Настройки» → «Универсальный доступ» → «Чтение и речь» или «Устный контент» → «Голоса». Выбери китайский (мандаринский) и скачай голос.</p>'+
@@ -305,7 +313,7 @@
     const word = byId.get(id);
     if (!word) return;
     const translations = word.examples.map((example,i) => '<li><div class="example-zh" lang="zh-Hans">'+escape(wholeExample(word,example))+'</div>'+
-      (example.pinyin ? '<div class="small">'+escape(example.pinyin)+'</div>' : '')+
+      examplePinyin(word,example)+
       '<div>'+escape(example.translation)+'</div>'+exampleFootnote(word,example)+iconButton('Произнести пример '+(i+1),'volume','speak-example',id+'~'+i)+'</li>').join('');
     setDialog(word.hanzi,'<div class="word-reading">'+escape(word.pinyin)+'</div><p>'+escape(word.meaning)+'</p>'+
       '<div class="actions">'+word.groups.map(group => '<a class="pill" href="#dict/'+encodeURIComponent(group)+'" data-action="close-dialog">'+escape(categoryName(group))+'</a>').join('')+

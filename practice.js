@@ -1,5 +1,5 @@
 window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId,toast,speak,persist,setDialog,go,render}) {
-  const {escape:e, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, exampleFootnote} = ui;
+  const {escape:e, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, exampleFootnote, examplePinyin} = ui;
   const modes = Study.displayModes;
   let template;
   let finished;
@@ -145,7 +145,8 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
     }
     const mistakes = history.reduce((sum,item) => sum + item.mistakes,0);
     const manual = history.some(item => item.manual);
-    const detail = manual ? 'Часть знаков проверена вручную.' : mistakes ? 'Ошибок в чертах: '+mistakes+'.' : 'Все знаки написаны по порядку.';
+    const detail = manual ? 'Часть знаков проверена вручную.' : mistakes ? 'Ошибок в чертах: '+mistakes+'.' :
+      history.some(item => item.free) ? 'Форма всех знаков совпала с образцом.' : 'Все знаки написаны по порядку.';
     answer('writing',history.every(item => item.correct),detail);
   }
 
@@ -165,6 +166,7 @@ window.HanziPractice = function ({Study,state,main,ui,getWords,categoryName,byId
       const example = question.example;
       const [before,after] = example.prompt.split('__');
       return '<div class="prompt-sentence" lang="zh-Hans">'+e(before)+'<span class="blank">'+(mark ? e(word.hanzi) : '…')+'</span>'+e(after)+'</div>'+
+        (mark ? examplePinyin(word,example) : '')+
         '<p class="translation">'+e(example.translation)+'</p>'+
         exampleFootnote(word,example)+
         (example.custom ? '<p class="small">Значение пропущенного слова: '+e(word.meaning)+'</p>' : '')+
