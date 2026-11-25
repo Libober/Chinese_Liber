@@ -1,0 +1,347 @@
+(() => {
+  const Study = window.HanziStudy;
+  const main = document.querySelector('#main');
+  const nav = document.querySelector('#navigation');
+  const dialog = document.querySelector('#dialog');
+  const status = document.querySelector('#toast');
+  const paths = {
+    home:'M3 10 12 3l9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm6 11v-7h6v7',
+    book:'M3 5a3 3 0 0 1 3-3h5v18H6a3 3 0 0 0-3 2zm18 0a3 3 0 0 0-3-3h-5v18h5a3 3 0 0 1 3 2z',
+    refresh:'M20 7v5h-5M4 17v-5h5m10 0a7 7 0 0 0-12-5m-2 5a7 7 0 0 0 12 5',
+    chart:'M4 19h16M7 15v-4m5 4V7m5 8V4',
+    settings:'M4 7h16M4 12h16M4 17h16M8 5v4m8 1v4m-6 1v4',
+    cards:'M5 7h14a2 2 0 0 1 2 2v10H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM6 4h12m-9 8h6m-6 3h4',
+    target:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-5a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-5h.01',
+    quote:'M3 4h18v12H8l-5 4zm4 5h10m-10 3h6',
+    pen:'m4 15-1 6 6-1L21 8l-5-5zm10-10 5 5M4 15l5 5',
+    volume:'M3 9h4l5-4v14l-5-4H3zm12 0a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12',
+    star:'m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.4-5.7-3-5.7 3 1.1-6.4-4.6-4.5 6.4-.9z',
+    check:'m5 12 4 4L19 6',
+    x:'m6 6 12 12M18 6 6 18',
+    clock:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm0-15v5l4 2'
+  };
+  const links = [['home','Главная','home'],['dict','Словарь','book'],['review','Повторение','refresh'],['progress','Прогресс','chart']];
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const icon = (name, size = 19) => '<svg aria-hidden="true" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="'+(paths[name] || paths.book)+'"></path></svg>';
+  const button = (label, action, data = '', primary = false, symbol = '') => '<button type="button" class="button '+(primary ? 'primary' : 'secondary')+'" data-action="'+action+'" data-value="'+escape(data)+'">'+(symbol ? icon(symbol) : '')+escape(label)+'</button>';
+  const iconButton = (label, symbol, action, data = '', pressed) => '<button type="button" class="icon-button" aria-label="'+escape(label)+'" title="'+escape(label)+'" data-action="'+action+'" data-value="'+escape(data)+'"'+(pressed === undefined ? '' : ' aria-pressed="'+pressed+'"')+'>'+icon(symbol)+'</button>';
+  const pluralRules = new Intl.PluralRules('ru');
+  const number = new Intl.NumberFormat('ru');
+  const wordCount = count => number.format(count)+' '+({one:'слово',few:'слова',many:'слов',other:'слова'}[pluralRules.select(count)]);
+  const pageTitle = (title, copy = '') => '<div class="page-title"><h1>'+escape(title)+'</h1>'+(copy ? '<p>'+escape(copy)+'</p>' : '')+'</div>';
+  const small = text => '<span class="small">'+escape(text)+'</span>';
+  const formatDate = timestamp => new Intl.DateTimeFormat('ru',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(timestamp);
+  const wholeExample = (word, example) => example.prompt.replace('__',word.hanzi);
+  const ui = {escape, icon, button, iconButton, pageTitle, wordCount, small, wholeExample, formatDate};
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(Study.stateKey)); } catch { saved = null; }
+  const state = Study.safeState(saved);
+  let words, byId, categories;
+  let toastTimer;
+  let route = {page:'home', key:'all'};
+  let dictionaryQuery = '';
+  let dictionaryStatus = 'all';
+
+  function rebuild() {
+    words = Study.buildVocabulary(state.custom);
+    byId = new Map(words.map(word => [word.id,word]));
+    categories = [...Study.categories];
+    for (const id of new Set(words.flatMap(word => word.groups))) {
+      if (categories.some(category => category.id === id)) continue;
+      categories.push({id,name:id === 'imported' ? 'Мои слова' : id.replace(/^extra:/,''),glyph:'字',description:'Из загруженного словаря',color:'sage'});
+    }
+  }
+
+  function persist() {
+    try { localStorage.setItem(Study.stateKey, JSON.stringify(state)); }
+    catch { toast('Браузер не смог сохранить изменения. Можно скачать резервную копию.'); }
+  }
+
+  function toast(message) {
+    clearTimeout(toastTimer);
+    status.textContent = message;
+    status.hidden = false;
+    toastTimer = setTimeout(() => { status.hidden = true; }, 4000);
+  }
+
+  function speak(text, slow = false, reading = '') {
+    if (!('speechSynthesis' in window)) return toast('На этом устройстве озвучка недоступна.');
+    const voices = speechSynthesis.getVoices().filter(voice => /^zh([-_]|$)/i.test(voice.lang));
+    const voice = voices.find(v => /^zh[-_](CN|Hans)/i.test(v.lang)) || voices[0];
+    if (!voice) return toast('Установи китайский голос в настройках устройства, чтобы включить озвучку.');
+    speechSynthesis.cancel();
+    // A bare polyphonic character often gets the default reading. Use a short phrase to disambiguate.
+    const samples = {'只|zhi': reading === 'zhī' ? '一只' : '只有', '还|hai':'还有','为|wei':'为了','会|hui':'我会','了|le':'好了'};
+    const key = text + '|' + Study.readingKey(reading);
+    const utterance = new SpeechSynthesisUtterance(samples[key] || text);
+    utterance.lang = voice.lang;
+    utterance.voice = voice;
+    utterance.rate = slow ? .68 : .88;
+    utterance.onerror = event => {
+      if (!['canceled','interrupted'].includes(event.error)) toast('Устройство не смогло воспроизвести китайскую озвучку.');
+    };
+    speechSynthesis.speak(utterance);
+  }
+
+  function categoryName(id) {
+    return categories.find(c => c.id === id)?.name || 'Весь словарь';
+  }
+
+  function getWords(id = 'all') {
+    if (id === 'all') return words;
+    if (id === 'due') return Study.dueWords(words,state);
+    if (id === 'new') return words.filter(word => !Study.getProgress(state,word.id));
+    if (id === 'photo') return words.filter(word => word.photo);
+    if (id === 'photo-new') return words.filter(word => word.photo && !word.original);
+    if (id === 'saved') return words.filter(word => state.favorites.includes(word.id));
+    if (id === 'mistakes') return words.filter(word => {
+      const p = Study.getProgress(state,word.id);
+      return p && p.level < 3 && p.attempts > p.correct;
+    });
+    return words.filter(word => word.groups.includes(id));
+  }
+
+  function setDialog(title, content) {
+    dialog.innerHTML = '<div class="dialog-body"><div class="dialog-head"><h2 id="dialog-title">'+escape(title)+'</h2>'+iconButton('Закрыть','x','close-dialog')+'</div>'+content+'</div>';
+    if (!dialog.open) dialog.showModal();
+  }
+
+  const practice = window.HanziPractice({Study,state,main,ui, getWords, categoryName, byId:id => byId.get(id),
+    toast, speak, persist, setDialog, go:hash => { location.hash = hash; }, render:() => render()});
+
+  function stat(value, label, symbol) {
+    return '<div class="stat"><span class="stat-mark">'+icon(symbol,21)+'</span><div><strong>'+number.format(value)+'</strong><span>'+escape(label)+'</span></div></div>';
+  }
+
+  function topicCard(category) {
+    const count = getWords(category.id).length;
+    return '<a class="topic" href="#dict/'+encodeURIComponent(category.id)+'"><span class="glyph" lang="zh-Hans" data-color="'+category.color+'">'+category.glyph+'</span><div class="topic-info"><h3>'+escape(category.name)+'</h3><p class="topic-meta">'+escape(category.description)+'</p><p class="topic-meta"><strong>'+wordCount(count)+'</strong></p></div></a>';
+  }
+
+  function modeGrid(scope) {
+    return '<div class="mode-grid">'+Study.displayModes.map(mode =>
+      '<button type="button" class="mode" data-action="configure" data-value="'+escape(scope)+'" data-mode="'+mode.id+'">'+icon(mode.icon,22)+'<strong>'+mode.name+'</strong>'+small(mode.description)+'</button>'
+    ).join('')+'</div>';
+  }
+
+  function home() {
+    const due = getWords('due').length;
+    const learned = words.filter(w => Study.getProgress(state,w.id)?.level >= 3).length;
+    const photoCount = getWords('photo').length;
+    return '<section class="hero"><div class="hero-copy"><h1>Китайский<br>по темам</h1><p>Запоминай слова, слушай произношение и тренируй письмо по чертам.</p><div class="actions">'+
+      (due ? '<a class="button primary" href="#review">'+icon('refresh')+'К повторению</a>' : button('Начать с карточек','configure','all',true,'cards'))+
+      '<a class="button secondary" href="#dict/photo">Слова с фото</a></div></div><img class="hero-picture" src="assets/calligraphy.jpg" width="864" height="576" alt="" fetchpriority="high"></section>'+
+      '<section class="stat-grid" aria-label="Сводка словаря">'+stat(words.length,'слов в словаре','book')+stat(learned,'закреплено','check')+stat(due,'к повторению','clock')+'</section>'+
+      (practice.canResume() ? '<aside class="banner"><div><strong>Тренировка не закончена</strong><p>'+escape(practice.resumeLabel())+'</p></div><a class="button primary" href="#practice">Продолжить</a></aside>' : '')+
+      '<section class="section"><div class="section-head"><div><h2>Темы словаря</h2><p>Открой тему, посмотри слова и выбери упражнение.</p></div><a class="button secondary" href="#dict">Весь словарь</a></div><div class="topic-grid">'+categories.filter(c => getWords(c.id).length).map(topicCard).join('')+'</div></section>'+
+      '<section class="section"><div class="section-head"><div><h2>Тренировки</h2><p>'+wordCount(photoCount)+' с фотографий уже в словаре.</p></div></div>'+modeGrid('all')+'</section>';
+  }
+
+  function wordStatus(id) {
+    const p = Study.getProgress(state,id);
+    if (!p) return ['Новое',''];
+    if (p.due <= Date.now()) return ['Пора повторить','ready'];
+    if (p.level >= 3) return ['Закреплено','solid'];
+    return ['В изучении',''];
+  }
+
+  function wordRow(word, showStatus = false) {
+    const favorite = state.favorites.includes(word.id);
+    const [label, color] = wordStatus(word.id);
+    return '<article class="word-row"><button type="button" class="term" lang="zh-Hans" data-action="detail" data-value="'+escape(word.id)+'">'+escape(word.hanzi)+'</button><span class="word-reading">'+escape(word.pinyin)+'</span><div class="word-meaning">'+escape(word.meaning)+(showStatus ? ' <span class="pill '+color+'">'+label+'</span>' : '')+'</div><div class="word-actions">'+
+      iconButton('Произнести '+word.hanzi,'volume','speak-word',word.id)+iconButton('В избранном: '+word.hanzi,'star','favorite',word.id,favorite)+'</div></article>';
+  }
+
+  function placeholder(copy) {
+    return '<div class="panel empty"><p>'+escape(copy)+'</p></div>';
+  }
+
+  const customScopes = {all:'Все темы',photo:'Слова с фото',saved:'Избранное',due:'К повторению',new:'Новые слова',mistakes:'Нужно закрепить','photo-new':'Новые слова с фото'};
+  const scopeName = id => customScopes[id] || categoryName(id);
+
+  function dictionary(key) {
+    const topic = categories.find(c => c.id === key);
+    const vocab = getWords(key);
+    const listed = Object.entries({all:'Все темы',photo:'Слова с фото','photo-new':'Новые слова с фото',saved:'Избранное'}).concat(categories.map(c => [c.id,c.name]));
+    const description = topic ? topic.description+' · '+wordCount(vocab.length) :
+      key === 'photo' ? 'Лексика со всех десяти фотографий, включая слова, уже знакомые по прежнему словарю.' :
+      key === 'photo-new' ? 'Слова с фотографий, которых не было в прежнем словаре.' :
+      key === 'saved' ? 'Слова, которые ты отметил звёздочкой.' : 'Ищи по ханзи, пиньиню или переводу.';
+    return pageTitle(key === 'all' ? 'Словарь' : scopeName(key), description)+
+      (key === 'photo' ? '<div class="actions" style="margin-bottom:1rem"><a class="button secondary" href="#dict/photo-new">Только новые с фото · '+getWords('photo-new').length+'</a></div>' : '')+
+      (vocab.length ? '<section><div class="section-head"><h3>Тренировка по этому набору</h3></div>'+modeGrid(key)+'</section>' : '')+
+      '<div class="filters"><label class="search">Поиск<input id="word-search" class="field" type="search" value="'+escape(dictionaryQuery)+'" placeholder="Иероглиф, пиньинь или перевод" autocomplete="off"></label>'+
+      '<label>Тема<select class="field" id="category-filter">'+listed.map(([id,name]) => '<option value="'+escape(id)+'"'+(key === id ? ' selected' : '')+'>'+escape(name)+'</option>').join('')+'</select></label>'+
+      '<label>Прогресс<select class="field" id="status-filter">'+[['all','Любой'],['new','Новые'],['due','К повторению'],['solid','Закреплённые']].map(([id,name]) => '<option value="'+id+'"'+(dictionaryStatus === id ? ' selected' : '')+'>'+name+'</option>').join('')+'</select></label></div>'+
+      '<p id="word-count" class="small word-count" aria-live="polite"></p><div id="word-list" class="word-list"></div>';
+  }
+
+  function filterDictionary() {
+    const list = document.querySelector('#word-list');
+    if (!list) return;
+    const query = Study.normalized(dictionaryQuery);
+    const compactQuery = Study.readingKey(dictionaryQuery);
+    const shown = getWords(route.key).filter(word => {
+      const p = Study.getProgress(state,word.id);
+      const progressMatch = dictionaryStatus === 'all' || dictionaryStatus === 'new' && !p ||
+        dictionaryStatus === 'due' && p?.due <= Date.now() || dictionaryStatus === 'solid' && p?.level >= 3;
+      return progressMatch && (!query || Study.normalized(word.hanzi+' '+word.pinyin+' '+word.meaning).includes(query) ||
+        compactQuery && Study.readingKey(word.pinyin).includes(compactQuery));
+    });
+    document.querySelector('#word-count').textContent = 'Найдено: '+wordCount(shown.length);
+    list.innerHTML = shown.length ? shown.map(word => wordRow(word,true)).join('') : placeholder('Под эти условия слова не нашлись.');
+  }
+
+  function review() {
+    const due = getWords('due');
+    const fresh = getWords('new');
+    const mistakes = getWords('mistakes');
+    const now = Date.now();
+    const upcoming = words.map(word => [word,Study.getProgress(state,word.id)])
+      .filter(([,p]) => p?.due > now).sort((a,b) => a[1].due-b[1].due).slice(0,12);
+    return pageTitle('Повторение','Здесь видно, какие слова повторить сейчас и какие добавить в следующую тренировку.')+
+      '<div class="stat-grid">'+stat(due.length,'к повторению','clock')+stat(fresh.length,'ещё не изучались','cards')+stat(mistakes.length,'нужно закрепить','target')+'</div>'+
+      '<section><div class="section-head"><h2>К повторению сегодня</h2>'+(due.length ? button('Повторить','configure','due',true,'refresh') : '')+'</div>'+
+      (due.length ? '<div class="word-list">'+due.map(word => wordRow(word,true)).join('')+'</div>' : placeholder('На данный момент очередь пуста. Можно взять новые слова или выбрать тему.'))+'</section>'+
+      '<section class="section"><div class="section-head"><h2>Следующая тренировка</h2></div><div class="actions">'+
+      (fresh.length ? button('Новые слова','configure','new',true,'cards') : '')+
+      (mistakes.length ? button('Слова с ошибками','configure','mistakes',false,'target') : '')+
+      (state.favorites.length ? button('Избранное','configure','saved',false,'star') : '')+
+      '<a class="button secondary" href="#dict">Выбрать слова в словаре</a></div></section>'+
+      (upcoming.length ? '<section class="section"><div class="section-head"><h2>Ближайшие повторения</h2></div><div class="panel progress-list">'+
+        upcoming.map(([word,p]) => '<div class="progress-line"><button type="button" class="term" lang="zh-Hans" data-action="detail" data-value="'+escape(word.id)+'">'+escape(word.hanzi)+'</button>'+small(word.meaning)+small(formatDate(p.due))+'</div>').join('')+'</div></section>' : '');
+  }
+
+  function progress() {
+    const results = words.map(w => Study.getProgress(state,w.id)).filter(Boolean);
+    const total = results.reduce((sum,p) => sum + p.attempts,0);
+    const correct = results.reduce((sum,p) => sum + p.correct,0);
+    const learned = results.filter(p => p.level >= 3).length;
+    return pageTitle('Прогресс','Закреплёнными считаются слова, которые ты правильно вспомнил на нескольких повторениях.')+
+      '<div class="stat-grid">'+stat(results.length,'слов в изучении','book')+stat(learned,'закреплено','check')+stat(total ? Math.round(correct/total*100) : 0,'точность, %','target')+'</div>'+
+      '<section><div class="section-head"><h2>По темам</h2></div><div class="panel progress-list">'+categories.map(category => {
+        const all = getWords(category.id);
+        const known = all.filter(word => Study.getProgress(state,word.id)?.level >= 3).length;
+        return '<div class="progress-line"><a href="#dict/'+encodeURIComponent(category.id)+'"><strong>'+escape(category.name)+'</strong></a><div class="progress-track" role="progressbar" aria-label="'+escape(category.name)+'" aria-valuenow="'+known+'" aria-valuemax="'+Math.max(1,all.length)+'"><span style="width:'+(all.length ? known/all.length*100 : 0)+'%"></span></div>'+small(known+' из '+all.length)+'</div>';
+      }).join('')+'</div></section>'+
+      '<section class="section"><div class="section-head"><h2>Последние тренировки</h2></div>'+
+      (state.sessions.length ? '<div class="panel progress-list">'+state.sessions.slice(0,8).map(s => '<div class="progress-line"><strong>'+escape(scopeName(s.scope))+'</strong>'+small(Study.displayModes.find(m => m.id === s.mode)?.name || 'Тренировка')+small(s.correct+' / '+s.total+' · '+formatDate(s.time))+'</div>').join('')+'</div>' : placeholder('Здесь появятся результаты завершённых тренировок.'))+'</section>';
+  }
+
+  const positionInfo = {
+    上:[50,18,''],下:[50,84,''],外面:[79,60,''],里面:[50,50,'inside'],左边:[23,50,''],右边:[77,50,''],
+    中间:[50,50,'between'],旁边:[70,67,''],前面:[50,66,''],后边:[50,35,'behind']
+  };
+  function positionFigure(word) {
+    const detail = positionInfo[word.hanzi];
+    if (!detail) return '';
+    const [x,y,modifier] = detail;
+    return '<figure class="position-scene '+modifier+'" role="img" aria-label="'+escape('Положение кота: '+word.meaning)+'"><span class="object"></span>'+
+      (modifier === 'between' ? '<span class="object second"></span>' : '')+
+      '<span class="cat" style="--x:'+x+'%;--y:'+y+'%" aria-hidden="true">🐈</span></figure>';
+  }
+
+  function showWord(id) {
+    const word = byId.get(id);
+    if (!word) return;
+    const translations = word.examples.map((example,i) => '<li><div class="example-zh" lang="zh-Hans">'+escape(wholeExample(word,example))+'</div>'+
+      (example.pinyin ? '<div class="small">'+escape(example.pinyin)+'</div>' : '')+
+      '<div>'+escape(example.translation)+'</div>'+iconButton('Произнести пример '+(i+1),'volume','speak-example',id+'~'+i)+'</li>').join('');
+    setDialog(word.hanzi,'<div class="word-reading">'+escape(word.pinyin)+'</div><p>'+escape(word.meaning)+'</p>'+
+      '<div class="actions">'+word.groups.map(group => '<a class="pill" href="#dict/'+encodeURIComponent(group)+'" data-action="close-dialog">'+escape(categoryName(group))+'</a>').join('')+
+      (word.photo ? '<span class="pill">С фотографии</span>' : '')+'</div>'+positionFigure(word)+
+      '<div class="actions">'+button('Произнести','speak-word',id,false,'volume')+button('Потренировать письмо','configure-word',id,true,'pen')+'</div>'+
+      (translations ? '<h3>Примеры</h3><ul class="example-list">'+translations+'</ul>' : ''));
+    document.querySelector('#dialog-title').classList.add('detail-term');
+    document.querySelector('#dialog-title').lang = 'zh-Hans';
+  }
+
+  function render() {
+    practice.cleanup();
+    nav.innerHTML = links.map(([id,label,symbol]) => '<a href="#'+id+'"'+(id === route.page ? ' aria-current="page"' : '')+'>'+icon(symbol,16)+escape(label)+'</a>').join('');
+    if (route.page === 'practice' || route.page === 'summary') {
+      practice.render(route.page);
+      return;
+    }
+    if (route.page === 'dict') {
+      main.innerHTML = dictionary(route.key);
+      filterDictionary();
+    } else if (route.page === 'review') main.innerHTML = review();
+    else if (route.page === 'progress') main.innerHTML = progress();
+    else main.innerHTML = home();
+  }
+
+  function updateRoute() {
+    const [requested, key] = location.hash.slice(1).split('/');
+    if (requested === 'main') return;
+    const page = ['home','dict','review','progress','practice','summary'].includes(requested) ? requested : 'home';
+    let unique = 'all';
+    try { if (key) unique = decodeURIComponent(key); } catch { unique = 'all'; }
+    if (page === 'dict' && unique !== route.key) {
+      dictionaryQuery = '';
+      dictionaryStatus = 'all';
+    }
+    route = {page,key:unique};
+    if (dialog.open) dialog.close();
+    render();
+    window.scrollTo(0,0);
+    main.focus({preventScroll:true});
+  }
+
+  const imports = window.HanziImport({Study,state, persist, rebuild, render, getWords, ui, toast, setDialog});
+
+  document.querySelector('.settings').innerHTML = icon('settings');
+  document.addEventListener('click', event => {
+    const control = event.target.closest('[data-action]');
+    if (!control) return;
+    const {action,value,mode} = control.dataset;
+    if (action === 'close-dialog') {
+      if (dialog.open) dialog.close();
+    } else if (action === 'settings') imports.settings();
+    else if (action === 'export') imports.exportBackup();
+    else if (action === 'configure' || action === 'configure-word') {
+      practice.configure(action === 'configure-word' ? 'one' : value, mode || (action === 'configure-word' ? 'writing' : 'flash'),
+        action === 'configure-word' ? byId.get(value) : null, scopeName);
+    } else if (action === 'detail') showWord(value);
+    else if (action === 'speak-word') {
+      const word = byId.get(value);
+      if (word) speak(word.hanzi,false,word.pinyin);
+    } else if (action === 'speak-example') {
+      const [id,i] = value.split('~');
+      const word = byId.get(id);
+      if (word?.examples[i]) speak(wholeExample(word,word.examples[i]),true);
+    } else if (action === 'favorite') {
+      const favorite = state.favorites.includes(value);
+      state.favorites = favorite ? state.favorites.filter(id => id !== value) : [...state.favorites,value];
+      control.setAttribute('aria-pressed', String(!favorite));
+      persist();
+      if (route.page === 'dict' && route.key === 'saved') filterDictionary();
+      toast(favorite ? 'Слово убрано из избранного.' : 'Слово добавлено в избранное.');
+    } else practice.action(action,value,control);
+  });
+
+  document.addEventListener('input', event => {
+    if (event.target.id !== 'word-search') return;
+    dictionaryQuery = event.target.value;
+    filterDictionary();
+  });
+  document.addEventListener('change', event => {
+    const {id,value} = event.target;
+    if (id === 'category-filter') location.hash = '#dict/'+encodeURIComponent(value);
+    else if (id === 'status-filter') {
+      dictionaryStatus = value;
+      filterDictionary();
+    } else if (id === 'import-file') imports.importFile(event.target);
+    else practice.change(id,value);
+  });
+  document.addEventListener('submit', event => {
+    if (event.target.id !== 'setup-form') return;
+    event.preventDefault();
+    if (practice.start(new FormData(event.target)) && dialog.open) dialog.close();
+  });
+  dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  window.addEventListener('hashchange',updateRoute);
+  rebuild();
+  updateRoute();
+  imports.migrate();
+})();
